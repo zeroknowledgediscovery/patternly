@@ -2,8 +2,8 @@
 mantis
 ===============
 
-.. image:: http://zed.uchicago.edu/logo/mantis.png
-   :height: 300px
+.. image:: http://zed.uchicago.edu/logo/mantislogo.png
+   :height: 100px
    :scale: 30 %
    :alt: mantis logo
    :align: center
