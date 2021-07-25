@@ -1,6 +1,5 @@
 ===============
-mantis: 
-[M]odel-free [An]omaly [T]racking [i]n [S]treams 
+mantis: [M]odel-free [An]omaly [T]racking [i]n [S]treams 
 ===============
 
 .. image:: http://zed.uchicago.edu/logo/mantislogo1.png
