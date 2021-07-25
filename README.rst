@@ -20,4 +20,8 @@ mantis
 .. code-block::
 
     import mantis
+    
+**Examples:**
+
+See examples directory for code and notebooks
 
