@@ -28,12 +28,13 @@ class AnomalyDetection:
         # values calculated in self.fit()
         self._fitted = False
         self.quantizer = None
-        self.dist_matrix = None
-        self.clusters = None
-        self.cluster_files = None
-        self.cluster_PFSAs = None
-        self.PFSA_llk_means = None
-        self.PFSA_llk_stds = None
+        self.dist_matrix = pd.DataFrame
+        self.clusters = []
+        self.cluster_files = []
+        self.cluster_PFSAs = []
+        self.cluster_PFSAs_info = []
+        self.PFSA_llk_means = []
+        self.PFSA_llk_stds = []
 
         # can be accessed after calling self.predict()
         self.curr_cluster_llk_vec = None
@@ -85,6 +86,14 @@ class AnomalyDetection:
         self.curr_cluster_llk_vec = cluster_llk_vec
         return np.sum(anomaly_vec) == len(self.cluster_PFSAs)
 
+    def print_PFSAs(self) -> None:
+        properties = ["%ANN_ERR", "%MRG_EPS", "%SYN_STR", "%SYM_FRQ", "%PITILDE", "%CONNX"]
+        for i in range(len(self.cluster_PFSAs_info)):
+            print(f"Cluster {i} PFSA:")
+            for prop in properties:
+                print(f"{prop}: {self.cluster_PFSAs_info[i][prop]}")
+            print("\n")
+
     def __quantize(self, X: pd.DataFrame, quantize_type: str = "complex") -> pd.DataFrame:
         if type(X) is pd.Series:
             X = X.copy().to_frame().reset_index(drop=True).T
@@ -126,6 +135,14 @@ class AnomalyDetection:
                 eps=eps,
             )
             alg.run()
+            PFSA_info = {}
+            PFSA_info["%ANN_ERR"] = alg.inference_error
+            PFSA_info["%MRG_EPS"] = alg.epsilon_used
+            PFSA_info["%SYN_STR"] = alg.synchronizing_string_found
+            PFSA_info["%SYM_FRQ"] = alg.symbol_frequency
+            PFSA_info["%PITILDE"] = alg.probability_morph_matrix
+            PFSA_info["%CONNX"] = alg.connectivity_matrix
+            self.cluster_PFSAs_info.append(PFSA_info)
         return PFSAs
 
     def __calculate_PFSA_stats(self, PFSAs: list[str], cluster_files: list[str]) -> Tuple[list[float], list[float]]:
