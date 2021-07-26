@@ -39,21 +39,34 @@ class AnomalyDetection:
         self.curr_cluster_llk_vec = None
 
     def fit(self, X: pd.DataFrame, y=None):
-        X_quantized = self.__quantize(X, multiline=True)
+        X_quantized = self.__quantize(X)
+        if self.verbose:
+            print("Calculating distance matrix")
         self.dist_matrix = Lsmash(
             seq=X_quantized,
             data_type="symbolic",
             sae=False
         ).run()
+        if self.verbose:
+            print("Clustering distance matrix")
         self.clusters = self.clustering_alg.fit(self.dist_matrix).labels_
         self.cluster_files = self.__generate_cluster_files(X_quantized, self.clusters)
+        if self.verbose:
+            print("Generating cluster PFSAs")
         self.cluster_PFSAs = self.__generate_cluster_PFSAs(self.cluster_files, eps=self.eps)
         self.PFSA_llk_means, self.PFSA_llk_stds = self.__calculate_PFSA_stats(self.cluster_PFSAs, self.cluster_files)
         self._fitted = True
 
         return self
 
-    def predict(self, X: pd.Series) -> bool:
+    def predict(self, X: pd.DataFrame) -> bool:
+        X_quantized = self.__quantize(X)
+        if type(X) is pd.Series:
+            return self.predict_single(X_quantized)
+        else:
+            return [self.predict_single(row) for _, row in X_quantized.iterrows()]
+
+    def predict_single(self, X: pd.Series) -> bool:
         X_quantized = self.__quantize(X)
         seqfile = RANDOM_NAME(path=self.temp_dir, clean=False)
         X_quantized.to_csv(seqfile, sep=" ", line_terminator=" ", index=False, header=False)
@@ -78,7 +91,7 @@ class AnomalyDetection:
         if not self.quantize or quantize_type is None:
             return X.copy()
         if quantize_type == "complex":
-            # use quantizer binary
+            # use cythonized quantizer binary
             if not self._fitted:
                 self.quantizer = Quantizer(n_quantizations=1, epsilon=-1)
                 self.quantizer.fit(X)
@@ -99,7 +112,7 @@ class AnomalyDetection:
                 .to_csv(cluster_files[i], sep=" ", header=False, index=False, float_format="%g")
         return cluster_files
 
-    def __generate_cluster_PFSAs(self, cluster_files: list[int], eps: float = 0.1) -> list[str]:
+    def __generate_cluster_PFSAs(self, cluster_files: list[str], eps: float = 0.1) -> list[str]:
         PFSAs = []
         for cluster_file in cluster_files:
             PFSA_file = RANDOM_NAME(path=self.temp_dir)
