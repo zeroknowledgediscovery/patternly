@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Union
 import numpy as np
 import sklearn.cluster
 import pandas as pd
@@ -28,13 +28,14 @@ class AnomalyDetection:
         # values calculated in self.fit()
         self._fitted = False
         self.quantizer = None
-        self.dist_matrix = pd.DataFrame
-        self.clusters = []
-        self.cluster_files = []
-        self.cluster_PFSAs = []
-        self.cluster_PFSAs_info = []
-        self.PFSA_llk_means = []
-        self.PFSA_llk_stds = []
+        self.data_file = ""
+        self.dist_matrix = pd.DataFrame()
+        self.clusters = []               # list of cluster labels
+        self.cluster_files = []          # list of file paths to clusters
+        self.cluster_PFSAs = []          # list of file paths to cluster PFSAs
+        self.cluster_PFSAs_info = []     # list of dicts of cluster PFSAs info for printing
+        self.PFSA_llk_means = []         # list of mean llk for each cluster
+        self.PFSA_llk_stds = []          # list of std of llk for each cluster
 
         # can be accessed after calling self.predict()
         self.curr_cluster_llk_vec = None
@@ -42,48 +43,36 @@ class AnomalyDetection:
 
     def fit(self, X, y=None):
         X_quantized = self.__quantize(X)
-
-        if self.verbose:
-            print("Calculating distance matrix")
-        param_set = {
-            "data_type": "symbolic",
-            "sae": False,
-        }
-        # don't create file if it already exists i.e. X is a file path
-        if type(X) is str and not self.quantize:
-            param_set["seqfile"] = X
-        else:
-            param_set["seq"] = X_quantized
-        self.dist_matrix = Lsmash(**param_set).run().round(8)
-
-        if self.verbose:
-            print("Clustering distance matrix")
-        self.clusters = self.clustering_alg.fit(self.dist_matrix).labels_
-
-        self.cluster_files = self.__generate_cluster_files(X_quantized, self.clusters)
-        self.cluster_PFSAs = self.__generate_cluster_PFSAs(self.cluster_files, eps=self.eps)
-        self.PFSA_llk_means, self.PFSA_llk_stds = self.__calculate_PFSA_stats(self.cluster_PFSAs, self.cluster_files)
-
+        self.__calculate_dist_matrix(X if type(X) is str else X_quantized)
+        self.__calculate_cluster_labels()
+        self.__write_cluster_files(X_quantized)
+        self.__calculate_cluster_PFSAs()
+        self.__calculate_PFSA_stats()
         self._fitted = True
         return self
 
 
-    def predict(self, X) -> bool:
-        X_quantized = self.__quantize(X)
+    def predict(self, X=None) -> Union[bool, list[bool]]:
+        # if no params passed to predict, predict all of original data
+        if X is None:
+            X_quantized = self.data_file
+        else:
+            X_quantized = self.__quantize(X)
         if type(X) is pd.Series:
             return self.predict_single(X_quantized)
         else:
-            return [self.predict_single(row) for _, row in X_quantized.iterrows()]
+            predictions = []
+            X_quantized.apply(lambda row : predictions.append(self.predict_single(row)), axis=1)
+            return predictions
 
 
     def predict_single(self, X) -> bool:
-        X_quantized = self.__quantize(X)
         seqfile = ""
         if type(X) is str and not self.quantize:
             seqfile = X
         else:
-            RANDOM_NAME(path=self.temp_dir, clean=False)
-            X_quantized.to_csv(seqfile, sep=" ", line_terminator=" ", index=False, header=False)
+            seqfile = RANDOM_NAME(path=self.temp_dir, clean=False)
+            X.to_csv(seqfile, sep=" ", line_terminator=" ", index=False, header=False)
 
         cluster_llk_vec = []
         anomaly_vec = []
@@ -117,7 +106,8 @@ class AnomalyDetection:
             else:
                 return X.copy()
         if self.verbose:
-            print("Quantizing")
+            print("Quantizing...")
+        # Quantizer() expects a DataFrame
         if type(X) is pd.Series:
             X = X.copy().to_frame().reset_index(drop=True).T
         if quantize_type == "complex":
@@ -132,34 +122,53 @@ class AnomalyDetection:
             return X.apply(lambda row : row.apply(lambda n : 1 if n > 0 else 0), axis=1)
 
 
-    def __generate_cluster_files(self, X: pd.DataFrame, clusters: list[int]) -> list[str]:
+    def __calculate_dist_matrix(self, X) -> None:
         if self.verbose:
-            print("Writing clusters to file")
-        n_clusters = len(set(clusters)) - (1 if -1 in clusters else 0)
-        X["cluster"] = clusters
+            print("Calculating distance matrix...")
+        # don't create file if it already exists i.e. X is a file path
+        if type(X) is str and not self.quantize:
+            self.data_file = X
+        else:
+            self.data_file = RANDOM_NAME(path=self.temp_dir)
+            X.to_csv(self.data_file, sep=" ", index=False, header=False)
+
+        self.dist_matrix = Lsmash(seqfile=self.data_file, data_type="symbolic", sae=False).run().round(8)
+
+
+    def __calculate_cluster_labels(self) -> None:
+        if self.verbose:
+            print("Clustering distance matrix...")
+        self.clusters = self.clustering_alg.fit(self.dist_matrix).labels_
+
+
+    def __write_cluster_files(self, X: pd.DataFrame) -> None:
+        n_clusters = len(set(self.clusters)) - (1 if -1 in self.clusters else 0)
+        X["cluster"] = self.clusters
         cluster_files = []
         for i in range(n_clusters):
+            if self.verbose:
+                print(f"Writing cluster {i + 1}/{n_clusters} to file...")
             cluster_files.append(RANDOM_NAME(path=self.temp_dir))
             X[X["cluster"] == i] \
                 .drop("cluster", axis=1) \
                 .to_csv(cluster_files[i], sep=" ", header=False, index=False, float_format="%g")
-        return cluster_files
+        self.cluster_files = cluster_files
 
 
-    def __generate_cluster_PFSAs(self, cluster_files: list[str], eps: float = 0.1) -> list[str]:
-        if self.verbose:
-            print("Generating cluster PFSAs")
-        PFSAs = []
-        for cluster_file in cluster_files:
+    def __calculate_cluster_PFSAs(self) -> None:
+        cluster_PFSAs = []
+        for i, cluster_file in enumerate(self.cluster_files):
+            if self.verbose:
+                print(f"Generating cluster PFSA {i + 1}/{len(self.cluster_files)}...")
             PFSA_file = RANDOM_NAME(path=self.temp_dir)
-            PFSAs.append(PFSA_file)
+            cluster_PFSAs.append(PFSA_file)
             alg = GenESeSS(
                 datafile=cluster_file,
                 outfile=PFSA_file,
                 data_type="symbolic",
                 data_dir="row",
                 force=True,
-                eps=eps,
+                eps=self.eps,
             )
             alg.run()
             PFSA_info = {}
@@ -170,18 +179,18 @@ class AnomalyDetection:
             PFSA_info["%PITILDE"] = alg.probability_morph_matrix
             PFSA_info["%CONNX"] = alg.connectivity_matrix
             self.cluster_PFSAs_info.append(PFSA_info)
-        return PFSAs
+        self.cluster_PFSAs = cluster_PFSAs
 
 
-    def __calculate_PFSA_stats(self, PFSAs: list[str], cluster_files: list[str]) -> Tuple[list[float], list[float]]:
+    def __calculate_PFSA_stats(self) -> None:
         # calculate the means and standard deviations of llks for each PFSA
         # to later determine if a sequence is an anomaly
         if self.verbose:
-            print("Calculating cluster PFSA means and stds")
+            print("Calculating cluster PFSA means and stds...")
         PFSA_llk_means = []
         PFSA_llk_stds = []
-        for i in range(len(PFSAs)):
-            llks = np.array(Llk(seqfile=cluster_files[i], pfsafile=PFSAs[i]).run())
+        for i in range(len(self.cluster_PFSAs)):
+            llks = np.array(Llk(seqfile=self.cluster_files[i], pfsafile=self.cluster_PFSAs[i]).run())
             PFSA_llk_means.append(np.mean(llks))
             PFSA_llk_stds.append(np.std(llks))
-        return PFSA_llk_means, PFSA_llk_stds
+        self.PFSA_llk_means, self.PFSA_llk_stds = PFSA_llk_means, PFSA_llk_stds
