@@ -53,40 +53,45 @@ class AnomalyDetection:
 
 
     def predict(self, X=None) -> Union[bool, list[bool]]:
-        # if no params passed to predict, predict all of original data
-        if X is None:
-            X_quantized = self.data_file
-        else:
-            X_quantized = self.__quantize(X)
-        if type(X) is pd.Series:
-            return self.predict_single(X_quantized)
-        else:
-            predictions = []
-            X_quantized.apply(lambda row : predictions.append(self.predict_single(row)), axis=1)
-            return predictions
-
-
-    def predict_single(self, X) -> bool:
         seqfile = ""
-        if type(X) is str and not self.quantize:
-            seqfile = X
+        if X is None:
+            seqfile = self.data_file
         else:
-            seqfile = RANDOM_NAME(path=self.temp_dir, clean=False)
-            X.to_csv(seqfile, sep=" ", line_terminator=" ", index=False, header=False)
+            if type(X) is str and not self.quantize:
+                seqfile = X
+            else:
+                seqfile = RANDOM_NAME(path=self.temp_dir, clean=False)
+                self.__quantize(X).to_csv(
+                    seqfile,
+                    sep=" ",
+                    line_terminator=(" " if type(X) is pd.Series else "\n"),
+                    index=False,
+                    header=False
+                )
 
         cluster_llk_vec = []
         anomaly_vec = []
         for i in range(len(self.cluster_PFSAs)):
-            curr_llk = Llk(seqfile=seqfile, pfsafile=self.cluster_PFSAs[i]).run()[0]
-            cluster_llk_vec.append(curr_llk)
+            curr_llks = Llk(seqfile=seqfile, pfsafile=self.cluster_PFSAs[i]).run()
+            cluster_llk_vec.append(curr_llks)
             # classify llk as anomaly if greater than X standard deviations above the mean
             upper_bound = self.PFSA_llk_means[i] + (self.PFSA_llk_stds[i] * self.anomaly_sensitivity)
-            anomaly_vec.append(1 if curr_llk > upper_bound else 0)
-
-        os_remove(seqfile)
-
+            for i, llk in enumerate(curr_llks):
+                anomaly_vec.append([])
+                anomaly_vec[i].append(1 if llk > upper_bound else 0)
         self.curr_cluster_llk_vec = cluster_llk_vec
-        return np.sum(anomaly_vec) == len(self.cluster_PFSAs)
+
+        predictions = []
+        for i in range(len(anomaly_vec)):
+            predictions.append(np.sum(anomaly_vec[i]) == len(self.cluster_PFSAs))
+
+        if len(predictions) == 1:
+            predictions = predictions[0]
+
+        if seqfile != self.data_file:
+            os_remove(seqfile)
+
+        return predictions
 
 
     def print_PFSAs(self) -> None:

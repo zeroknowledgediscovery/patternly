@@ -12,14 +12,14 @@ def os_remove(filename: str) -> int:
     except OSError:
         return 1
 
-# def run_once_per_process(f):
-#     def wrapper(*args, **kwargs):
-#         if os.getpgrp() != wrapper.has_run:
-#             wrapper.has_run = os.getpgrp()
-#             return f(*args, **kwargs)
+def run_once_per_process(f):
+    def wrapper(*args, **kwargs):
+        if os.getpgrp() != wrapper.has_run:
+            wrapper.has_run = os.getpgrp()
+            return f(*args, **kwargs)
 
-#     wrapper.has_run = 0
-#     return wrapper
+    wrapper.has_run = 0
+    return wrapper
 
 def _clean_up_temp_folder(path, signal=None, frame=None):
     if signal is not None:
@@ -33,11 +33,11 @@ def _clean_up_temp_folder(path, signal=None, frame=None):
     except OSError:
         pass
 
-# @run_once_per_process
+@run_once_per_process
 def add_signal(path):
     atexit.register(_clean_up_temp_folder, path)
 
-def RANDOM_NAME(clean: bool = True, path: str = "ad_temp") -> str:
+def RANDOM_NAME(clean: bool = True, path: str = "zed_temp") -> str:
     if not os.path.isdir(path):
         os.mkdir(path)
     path = os.path.join(path, "clean_")
