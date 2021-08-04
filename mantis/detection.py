@@ -70,20 +70,20 @@ class AnomalyDetection:
                 )
 
         cluster_llk_vec = []
-        anomaly_vec = []
+        anomaly_vec = np.zeros(
+            len(self.clusters),
+            dtype=np.int8
+        )
         for i in range(len(self.cluster_PFSAs)):
             curr_llks = Llk(seqfile=seqfile, pfsafile=self.cluster_PFSAs[i]).run()
             cluster_llk_vec.append(curr_llks)
             # classify llk as anomaly if greater than X standard deviations above the mean
             upper_bound = self.PFSA_llk_means[i] + (self.PFSA_llk_stds[i] * self.anomaly_sensitivity)
-            for i, llk in enumerate(curr_llks):
-                anomaly_vec.append([])
-                anomaly_vec[i].append(1 if llk > upper_bound else 0)
+            for j, llk in enumerate(curr_llks):
+                anomaly_vec[j] += 1 if llk > upper_bound else 0
         self.curr_cluster_llk_vec = cluster_llk_vec
 
-        predictions = []
-        for i in range(len(anomaly_vec)):
-            predictions.append(np.sum(anomaly_vec[i]) == len(self.cluster_PFSAs))
+        predictions = [x == len(self.cluster_PFSAs) for x in anomaly_vec]
 
         if len(predictions) == 1:
             predictions = predictions[0]
