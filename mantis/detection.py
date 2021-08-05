@@ -28,14 +28,14 @@ class AnomalyDetection:
         # values calculated in self.fit()
         self._fitted = False
         self.quantizer = None
-        self.data_file = ""
-        self.dist_matrix = pd.DataFrame()
-        self.clusters = []               # list of cluster labels
-        self.cluster_files = []          # list of file paths to clusters
-        self.cluster_PFSAs = []          # list of file paths to cluster PFSAs
-        self.cluster_PFSAs_info = []     # list of dicts of cluster PFSAs info for printing
-        self.PFSA_llk_means = []         # list of mean llk for each cluster
-        self.PFSA_llk_stds = []          # list of std of llk for each cluster
+        self.data_file = ""                # file path of original data
+        self.dist_matrix = pd.DataFrame()  # calculated by lsmash, used for clustering
+        self.clusters = []                 # list of cluster labels
+        self.cluster_files = []            # list of file paths to clusters
+        self.cluster_PFSAs = []            # list of file paths to cluster PFSAs
+        self.cluster_PFSAs_info = []       # list of dicts of cluster PFSAs info for printing
+        self.PFSA_llk_means = []           # list of mean llk for each cluster
+        self.PFSA_llk_stds = []            # list of std of llk for each cluster
 
         # can be accessed after calling self.predict()
         self.curr_cluster_llk_vec = None
@@ -54,6 +54,7 @@ class AnomalyDetection:
 
     def predict(self, X=None) -> Union[bool, list[bool]]:
         seqfile = ""
+        # commonly want to find anomalies in original data
         if X is None:
             seqfile = self.data_file
         else:
@@ -69,20 +70,18 @@ class AnomalyDetection:
                     header=False
                 )
 
-        cluster_llk_vec = []
-        anomaly_vec = np.zeros(
-            len(self.clusters),
-            dtype=np.int8
-        )
+        cluster_llk_vec = np.empty([len(self.cluster_PFSAs), len(self.clusters)], dtype=np.float64)
+        anomaly_vec = np.zeros(len(self.clusters), dtype=np.int8)
         for i in range(len(self.cluster_PFSAs)):
             curr_llks = Llk(seqfile=seqfile, pfsafile=self.cluster_PFSAs[i]).run()
-            cluster_llk_vec.append(curr_llks)
+            cluster_llk_vec[i] = curr_llks
             # classify llk as anomaly if greater than X standard deviations above the mean
             upper_bound = self.PFSA_llk_means[i] + (self.PFSA_llk_stds[i] * self.anomaly_sensitivity)
             for j, llk in enumerate(curr_llks):
                 anomaly_vec[j] += 1 if llk > upper_bound else 0
         self.curr_cluster_llk_vec = cluster_llk_vec
 
+        # consider to be anomaly if all llks above specified upper bound
         predictions = [x == len(self.cluster_PFSAs) for x in anomaly_vec]
 
         if len(predictions) == 1:
@@ -137,7 +136,7 @@ class AnomalyDetection:
             self.data_file = RANDOM_NAME(path=self.temp_dir)
             X.to_csv(self.data_file, sep=" ", index=False, header=False)
 
-        self.dist_matrix = Lsmash(seqfile=self.data_file, data_type="symbolic", sae=False).run().round(8)
+        self.dist_matrix = pd.DataFrame(Lsmash(seqfile=self.data_file, data_type="symbolic", sae=False).run()).round(8)
 
 
     def __calculate_cluster_labels(self) -> None:

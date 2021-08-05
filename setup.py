@@ -1,40 +1,48 @@
 from setuptools import setup, find_packages
 from os import path
-import numpy as np
 
-this_directory = path.abspath(path.dirname(__file__))
+here = path.abspath(path.dirname(__file__))
+package_name = 'mantis'
 
 version = {}
-with open("mantis/_version.py") as fp:
-    line = fp.read()
-    #print(line)
-    ls = line.split('.')
-    last = str(int(ls[-1].split('"')[0]) + 1) + '"'
-    ls[-1] = last
-    #print('.'.join(ls))
-    ls[-1] = last
-    exec(line, version)
+with open('version.py') as fp:
+    exec(fp.read(), version)
 
-# with open("mantis/_version.py", "w") as fp:
-# 	fp.write('.'.join(ls))
-
-with open(path.join(this_directory, 'README.rst'), encoding='utf-8') as f:
+with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name='mantis',
-    version=version['__version__'],
+    name=package_name,
+    author='zed.uchicago.edu',
+    author_email='ishanu@uchicago.edu',
+    version = str(version['__version__']),
     packages=find_packages(),
-    keywords=['timeseries'],
-    install_requires=['pandas', 'numpy', 'scikit-learn', 'zedsuite'],
-    # metadata for PyPI upload
+    scripts=[],
     url='https://github.com/zeroknowledgediscovery/mantis',
-    description=("A package for time series anomaly detection"),
-    long_description=long_description,
-    long_description_content_type='text/markdown',
-    classifiers=[
-        "Programming Language :: Python :: 3"
+    license='LICENSE',
+    description='A package for time series anomaly detection',
+    keywords=[
+        'time series',
+        'anomaly detection',
+        'machine learning',
     ],
+    download_url='https://github.com/zeroknowledgediscovery/mantis/archive/'+str(version['__version__'])+'.tar.gz',
+    long_description=long_description,
+    long_description_content_type='text/x-rst',
+    install_requires=[
+        'numpy',
+        'pandas',
+        'sklearn',
+        'zedsuite',
+    ],
+    python_requires='>=3.6',
+    classifiers=[
+        'Development Status :: 4 - Beta',
+        'Intended Audience :: Developers',
+        'Intended Audience :: Science/Research',
+        'Topic :: Scientific/Engineering :: Information Analysis',
+        'Topic :: Software Development :: Libraries',
+        'License :: OSI Approved :: MIT License',
+        'Programming Language :: Python :: 3.6'],
+    include_package_data=True,
 )
-
-
