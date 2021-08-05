@@ -5,7 +5,7 @@ from os import path
 import warnings
 
 
-package_name = 'mantis'
+package_name = 'patternly'
 example_dir = 'examples/'
 example_data_dir = example_dir + 'example_data/'
 
@@ -29,12 +29,13 @@ setup(
     scripts=[],
     url='https://github.com/zeroknowledgediscovery/mantis',
     license='LICENSE',
-    description='[M]odel-free [An]omaly [T]racking [i]n [S]treams',
+    description='A tool for detecting anomalies in time series data',
     keywords=[
         'anomaly detection',
         'timeseries',
         'model-free',
-	'adaptive'],
+        'adaptive',
+    ],
     download_url='https://github.com/zeroknowledgediscovery/mantis/archive/'+str(version['__version__'])+'.tar.gz',
     long_description=long_description,
     long_description_content_type='text/x-rst',
@@ -47,13 +48,14 @@ setup(
     ],
     python_requires='>=3.6',
     classifiers=[
-	'Development Status :: 4 - Beta',
-	"Intended Audience :: Developers",
-	"Intended Audience :: Science/Research",
-	"Topic :: Scientific/Engineering :: Information Analysis",
-	"Topic :: Software Development :: Libraries",
-	"License :: OSI Approved :: MIT License",
-	"Programming Language :: Python :: 3.6"],
+        'Development Status :: 4 - Beta',
+        "Intended Audience :: Developers",
+        "Intended Audience :: Science/Research",
+        "Topic :: Scientific/Engineering :: Information Analysis",
+        "Topic :: Software Development :: Libraries",
+        "License :: OSI Approved :: MIT License",
+        "Programming Language :: Python :: 3.6"
+    ],
     include_package_data=True,
 )
 
