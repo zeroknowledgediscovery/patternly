@@ -1,0 +1,6 @@
+*.dat
+.ipynb_checkpoints/
+test.py
+__pycache__/
+*.egg-info/
+build/
