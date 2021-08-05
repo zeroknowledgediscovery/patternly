@@ -1,0 +1,3 @@
+include version.py
+recursive-include mantis/examples *
+recursive-include mantis *.ipynb *.tgz *.cfg *.md *.rst
