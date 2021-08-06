@@ -28,7 +28,3 @@ See `examples`_.
 
     from patternly import AnomalyDetection
 
-**Examples:**
-
-See examples directory for code and notebooks
-

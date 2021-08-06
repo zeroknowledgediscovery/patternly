@@ -38,8 +38,8 @@ class AnomalyDetection:
         self.temp_dir = "zed_temp"
 
         # values calculated in self.fit()
-        self._fitted = False
-        self.quantizer = None
+        self._fitted = False               # whether model has been fit
+        self.quantizer = None              # quantizer used for quantizing data
         self.data_file = ""                # file path of original data
         self.dist_matrix = pd.DataFrame()  # calculated by lsmash, used for clustering
         self.clusters = []                 # list of cluster labels
@@ -53,7 +53,7 @@ class AnomalyDetection:
         self.curr_cluster_llk_vec = None
 
 
-    def fit(self, X, y=None):
+    def fit(self, X: Union[pd.DataFrame, str], y=None):
         """ Fits an anomaly detection model
 
         Args:
@@ -73,7 +73,7 @@ class AnomalyDetection:
         return self
 
 
-    def predict(self, X=None) -> Union[bool, list[bool]]:
+    def predict(self, X: Union[pd.DataFrame, str] = None) -> Union[bool, list[bool]]:
         """ Predicts whether a time series sequence is anomalous
 
         Args:
