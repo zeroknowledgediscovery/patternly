@@ -18,6 +18,18 @@ class AnomalyDetection:
         eps: float = 0.1,
         verbose: bool = False
     ) -> None:
+        """
+        Args:
+            anomaly_sensitivity (float): how many standard deviations above the mean llk to consider an anomaly
+            cluster_alg (sklearn.cluster): clustering algorithm to use
+            quantize (bool): whether to quantize the data
+            eps (float): epsilon parameter for finding PFSAs
+            verbose (bool): whether to print verbose output
+
+        Returns:
+            None
+        """
+
         self.anomaly_sensitivity = anomaly_sensitivity
         self.clustering_alg = clustering_alg
         self.quantize = quantize
@@ -42,6 +54,15 @@ class AnomalyDetection:
 
 
     def fit(self, X, y=None):
+        """ Fits an anomaly detection model
+
+        Args:
+            X (pd.DataFrame or str): time series data to be fit
+            y (pd.Series): labels for X (only for sklearn standard)
+
+        Returns:
+            self
+        """
         X_quantized = self.__quantize(X)
         self.__calculate_dist_matrix(X if type(X) is str else X_quantized)
         self.__calculate_cluster_labels()
@@ -53,6 +74,14 @@ class AnomalyDetection:
 
 
     def predict(self, X=None) -> Union[bool, list[bool]]:
+        """ Predicts whether a time series sequence is anomalous
+
+        Args:
+            X (pd.DataFrame or str): time series data to find anomalies, if None then predicts on original data
+
+        Returns:
+            bool or list[bool]: True if time series is an anomaly, False otherwise
+        """
         seqfile = ""
         # commonly want to find anomalies in original data
         if X is None:
@@ -94,6 +123,13 @@ class AnomalyDetection:
 
 
     def print_PFSAs(self) -> None:
+        """ Prints PFSAs found for each cluster
+
+        Args:
+            None
+        Returns:
+            None
+        """
         properties = ["%ANN_ERR", "%MRG_EPS", "%SYN_STR", "%SYM_FRQ", "%PITILDE", "%CONNX"]
         for i in range(len(self.cluster_PFSAs_info)):
             print(f"Cluster {i} PFSA:")
