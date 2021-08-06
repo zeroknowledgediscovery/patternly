@@ -15,11 +15,18 @@ patternly
 
 .. _PFSA: https://pubmed.ncbi.nlm.nih.gov/23277601/
 
+
+**Installation:**
+
 **Usage:**
+
+See `examples`_.
+
+.. _examples: https://github.com/zeroknowledgediscovery/patternly/tree/main/examples
 
 .. code-block::
 
-    import patternly
+    from patternly import AnomalyDetection
 
 **Examples:**
 
