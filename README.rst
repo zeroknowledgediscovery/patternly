@@ -26,5 +26,5 @@ See `examples`_.
 
 .. code-block::
 
-    from patternly import AnomalyDetection
+    from patternly.detection import AnomalyDetection
 

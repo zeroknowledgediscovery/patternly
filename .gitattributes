@@ -1,0 +1,2 @@
+# don't count HTML document files as code
+html/* linguist-vendored

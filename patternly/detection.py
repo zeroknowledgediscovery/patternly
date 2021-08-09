@@ -1,33 +1,35 @@
 from typing import Union
 import numpy as np
-import sklearn.cluster
 import pandas as pd
+from sklearn.cluster import KMeans
 from zedsuite.zutil import Llk, Lsmash
 from zedsuite.genesess import GenESeSS
 from zedsuite.quantizer import Quantizer
-from patternly.utils import RANDOM_NAME, os_remove
+from patternly._utils import RANDOM_NAME, os_remove
 
 
 class AnomalyDetection:
+    """ Tool for anomaly detection """
     def __init__(
         self,
         *,
         anomaly_sensitivity: float = 1,
-        clustering_alg: sklearn.cluster = sklearn.cluster.KMeans(),
+        clustering_alg = KMeans(),
         quantize: bool = True,
         eps: float = 0.1,
         verbose: bool = False
     ) -> None:
         """
         Args:
-            anomaly_sensitivity (float): how many standard deviations above the mean llk to consider an anomaly
-            cluster_alg (sklearn.cluster): clustering algorithm to use
-            quantize (bool): whether to quantize the data
-            eps (float): epsilon parameter for finding PFSAs
-            verbose (bool): whether to print verbose output
 
-        Returns:
-            None
+            anomaly_sensitivity (float, optional): how many standard deviations above the mean
+                                                   llk to consider an anomaly (Default = 1)\n
+            cluster_alg (sklearn.cluster, optional): clustering algorithm to use
+                                                     (Default = KMeans())\n
+            quantize (bool, optional): whether to quantize the data (Default = True)\n
+            eps (float, optional): epsilon parameter for finding PFSAs (Default = 0.1)\n
+            verbose (bool, optional): whether to print verbose output (Default = False)\n
+
         """
 
         self.anomaly_sensitivity = anomaly_sensitivity
@@ -54,13 +56,16 @@ class AnomalyDetection:
 
 
     def fit(self, X: Union[pd.DataFrame, str], y=None):
-        """ Fits an anomaly detection model
+        """ Fit an anomaly detection model
 
         Args:
+
             X (pd.DataFrame or str): time series data to be fit
-            y (pd.Series): labels for X (only for sklearn standard)
+            y (pd.Series, optional): labels for X only provided for sklearn standard
+                                     (Default = None)
 
         Returns:
+
             self
         """
         X_quantized = self.__quantize(X)
@@ -74,13 +79,17 @@ class AnomalyDetection:
 
 
     def predict(self, X: Union[pd.DataFrame, str] = None) -> Union[bool, list[bool]]:
-        """ Predicts whether a time series sequence is anomalous
+        """ Predict whether a time series sequence is anomalous
 
         Args:
-            X (pd.DataFrame or str): time series data to find anomalies, if None then predicts on original data
+
+            X (pd.DataFrame or str, optional): time series data to find anomalies, if None then
+                                               predicts on original data (Default = None)
 
         Returns:
+
             bool or list[bool]: True if time series is an anomaly, False otherwise
+                                output shape depends on input
         """
         seqfile = ""
         # commonly want to find anomalies in original data
@@ -123,13 +132,7 @@ class AnomalyDetection:
 
 
     def print_PFSAs(self) -> None:
-        """ Prints PFSAs found for each cluster
-
-        Args:
-            None
-        Returns:
-            None
-        """
+        """ Print PFSAs found for each cluster """
         properties = ["%ANN_ERR", "%MRG_EPS", "%SYN_STR", "%SYM_FRQ", "%PITILDE", "%CONNX"]
         for i in range(len(self.cluster_PFSAs_info)):
             print(f"Cluster {i} PFSA:")
@@ -140,6 +143,7 @@ class AnomalyDetection:
 
 
     def __quantize(self, X, quantize_type: str = "complex") -> pd.DataFrame:
+        """ Quantize the data into finite alphabet """
         if not self.quantize or quantize_type is None:
             if type(X) is str:
                 return pd.read_csv(X, sep=" ", header=None, low_memory=False).dropna(how="all", axis=1)
@@ -163,6 +167,7 @@ class AnomalyDetection:
 
 
     def __calculate_dist_matrix(self, X) -> None:
+        """ Calculate distance matrix using lsmash """
         if self.verbose:
             print("Calculating distance matrix...")
         # don't create file if it already exists i.e. X is a file path
@@ -176,12 +181,14 @@ class AnomalyDetection:
 
 
     def __calculate_cluster_labels(self) -> None:
+        """ Cluster distance matrix """
         if self.verbose:
             print("Clustering distance matrix...")
         self.clusters = self.clustering_alg.fit(self.dist_matrix).labels_
 
 
     def __write_cluster_files(self, X: pd.DataFrame) -> None:
+        """ Write cluster time series data to files """
         n_clusters = len(set(self.clusters)) - (1 if -1 in self.clusters else 0)
         X["cluster"] = self.clusters
         cluster_files = []
@@ -196,6 +203,7 @@ class AnomalyDetection:
 
 
     def __calculate_cluster_PFSAs(self) -> None:
+        """ Infer PFSAs from clusters using genESeSS """
         cluster_PFSAs = []
         for i, cluster_file in enumerate(self.cluster_files):
             if self.verbose:
@@ -223,8 +231,8 @@ class AnomalyDetection:
 
 
     def __calculate_PFSA_stats(self) -> None:
-        # calculate the means and standard deviations of llks for each PFSA
-        # to later determine if a sequence is an anomaly
+        """ Calculate the means and standard deviations of llks for each PFSA
+            to later determine if a sequence is an anomaly """
         if self.verbose:
             print("Calculating cluster PFSA means and stds...")
         PFSA_llk_means = []
