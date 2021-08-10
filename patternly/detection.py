@@ -50,6 +50,7 @@ class AnomalyDetection:
         self.dist_matrix = pd.DataFrame()  # calculated by lsmash, used for clustering
         self.clusters = []                 # list of cluster labels
         self.cluster_files = []            # list of file paths to clusters
+        self.dot_files = []                # list of file paths to PFSA dot files
         self.cluster_PFSAs = []            # list of file paths to cluster PFSAs
         self.cluster_PFSAs_info = []       # list of dicts of cluster PFSAs info for printing
         self.PFSA_llk_means = []           # list of mean llk for each cluster
@@ -57,6 +58,7 @@ class AnomalyDetection:
 
         # can be accessed after calling self.predict()
         self.curr_cluster_llk_vec = None
+        self.closest_match = None
 
 
     def fit(self, X: Union[pd.DataFrame, str], y=None):
@@ -137,6 +139,7 @@ class AnomalyDetection:
             for j, llk in enumerate(curr_llks):
                 anomaly_vec[j] += 1 if llk > upper_bound else 0
         self.curr_cluster_llk_vec = cluster_llk_vec
+        self.closest_match = np.argmin(cluster_llk_vec, axis=0)
 
         # consider to be anomaly if all llks above specified upper bound
         predictions = [x == len(self.cluster_PFSAs) for x in anomaly_vec]
@@ -229,11 +232,14 @@ class AnomalyDetection:
     def __calculate_cluster_PFSAs(self) -> None:
         """ Infer PFSAs from clusters using genESeSS """
         cluster_PFSAs = []
+        dot_files = []
         for i, cluster_file in enumerate(self.cluster_files):
             if self.verbose:
                 print(f"Generating cluster PFSA {i + 1}/{len(self.cluster_files)}...")
             PFSA_file = RANDOM_NAME(path=self.temp_dir)
             cluster_PFSAs.append(PFSA_file)
+            dot_file = RANDOM_NAME(path=self.temp_dir)
+            dot_files.append(dot_file)
             alg = GenESeSS(
                 datafile=cluster_file,
                 outfile=PFSA_file,
@@ -241,6 +247,7 @@ class AnomalyDetection:
                 data_dir="row",
                 force=True,
                 eps=self.eps,
+                dot=dot_file,
             )
             alg.run()
             PFSA_info = {}
@@ -251,7 +258,9 @@ class AnomalyDetection:
             PFSA_info["%PITILDE"] = alg.probability_morph_matrix
             PFSA_info["%CONNX"] = alg.connectivity_matrix
             self.cluster_PFSAs_info.append(PFSA_info)
+
         self.cluster_PFSAs = cluster_PFSAs
+        self.dot_files = dot_files
 
 
     def __calculate_PFSA_stats(self) -> None:
