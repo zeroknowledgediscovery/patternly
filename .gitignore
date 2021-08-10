@@ -4,3 +4,4 @@ test.py
 __pycache__/
 *.egg-info/
 build/
+zed_temp/
