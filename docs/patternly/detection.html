@@ -85,6 +85,7 @@
         <span class="n">anomaly_sensitivity</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">clustering_alg</span> <span class="o">=</span> <span class="n">KMeans</span><span class="p">(),</span>
         <span class="n">quantize</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">quantize_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;complex&quot;</span><span class="p">,</span>
         <span class="n">eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
         <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -96,6 +97,8 @@
 <span class="sd">            cluster_alg (sklearn.cluster, optional): clustering algorithm to use</span>
 <span class="sd">                                                     (Default = KMeans())\n</span>
 <span class="sd">            quantize (bool, optional): whether to quantize the data (Default = True)\n</span>
+<span class="sd">            quantize_type (str, optional): type of quantization to use (&quot;complex&quot; or &quot;simple&quot;)</span>
+<span class="sd">                                           (Default = &quot;complex&quot;)\n</span>
 <span class="sd">            eps (float, optional): epsilon parameter for finding PFSAs (Default = 0.1)\n</span>
 <span class="sd">            verbose (bool, optional): whether to print verbose output (Default = False)\n</span>
 
@@ -104,6 +107,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">anomaly_sensitivity</span> <span class="o">=</span> <span class="n">anomaly_sensitivity</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">clustering_alg</span> <span class="o">=</span> <span class="n">clustering_alg</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">quantize</span> <span class="o">=</span> <span class="n">quantize</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">quantize_type</span> <span class="o">=</span> <span class="n">quantize_type</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">eps</span> <span class="o">=</span> <span class="n">eps</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">temp_dir</span> <span class="o">=</span> <span class="s2">&quot;zed_temp&quot;</span>
@@ -147,13 +151,14 @@
         <span class="k">return</span> <span class="bp">self</span>
 
 
-    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">bool</span><span class="p">]]:</span>
+    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">clean</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">bool</span><span class="p">]]:</span>
         <span class="sd">&quot;&quot;&quot; Predict whether a time series sequence is anomalous</span>
 
 <span class="sd">        Args:</span>
 
-<span class="sd">            X (pd.DataFrame or str, optional): time series data to find anomalies, if None then</span>
-<span class="sd">                                               predicts on original data (Default = None)</span>
+<span class="sd">            X (pd.DataFrame or pd.Series or str, optional): time series data to find anomalies, if None then</span>
+<span class="sd">                                                            predicts on original data (Default = None)</span>
+<span class="sd">            clean (bool, optional): whether to remove temp files (Default = True)</span>
 
 <span class="sd">        Returns:</span>
 
@@ -161,24 +166,38 @@
 <span class="sd">                                output shape depends on input</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">seqfile</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="n">num_predictions</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="c1"># commonly want to find anomalies in original data</span>
         <span class="k">if</span> <span class="n">X</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">seqfile</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_file</span>
+            <span class="n">num_predictions</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">clusters</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">X</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">str</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">quantize</span><span class="p">:</span>
-                <span class="n">seqfile</span> <span class="o">=</span> <span class="n">X</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">seqfile</span> <span class="o">=</span> <span class="n">RANDOM_NAME</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">temp_dir</span><span class="p">,</span> <span class="n">clean</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">__quantize</span><span class="p">(</span><span class="n">X</span><span class="p">)</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span>
-                    <span class="n">seqfile</span><span class="p">,</span>
-                    <span class="n">sep</span><span class="o">=</span><span class="s2">&quot; &quot;</span><span class="p">,</span>
-                    <span class="n">line_terminator</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot; &quot;</span> <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">X</span><span class="p">)</span> <span class="ow">is</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span> <span class="k">else</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">),</span>
-                    <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                    <span class="n">header</span><span class="o">=</span><span class="kc">False</span>
-                <span class="p">)</span>
+            <span class="c1"># if type(X) is str and not self.quantize:</span>
+            <span class="c1">#     seqfile = X</span>
+            <span class="c1"># else:</span>
+            <span class="n">is_series</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">X</span><span class="p">)</span> <span class="ow">is</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span>
+            <span class="n">seqfile</span> <span class="o">=</span> <span class="n">RANDOM_NAME</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">temp_dir</span><span class="p">,</span> <span class="n">clean</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">X_quantized</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__quantize</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+            <span class="n">X_quantized</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span>
+                <span class="n">seqfile</span><span class="p">,</span>
+                <span class="n">sep</span><span class="o">=</span><span class="s2">&quot; &quot;</span><span class="p">,</span>
+                <span class="n">line_terminator</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot; &quot;</span> <span class="k">if</span> <span class="n">is_series</span> <span class="k">else</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">),</span>
+                <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">header</span><span class="o">=</span><span class="kc">False</span>
+            <span class="p">)</span>
 
-        <span class="n">cluster_llk_vec</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">([</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cluster_PFSAs</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">clusters</span><span class="p">)],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">anomaly_vec</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">clusters</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int8</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">is_series</span><span class="p">:</span>
+                <span class="n">num_predictions</span> <span class="o">=</span> <span class="mi">1</span>
+                <span class="c1"># remove trailing space because it affects llk calculation</span>
+                <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">seqfile</span><span class="p">,</span> <span class="s2">&quot;r+&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                    <span class="n">line</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">f</span><span class="p">)</span><span class="o">.</span><span class="n">rstrip</span><span class="p">()</span>
+                    <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+                    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">line</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">num_predictions</span> <span class="o">=</span> <span class="n">X_quantized</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="n">cluster_llk_vec</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">([</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cluster_PFSAs</span><span class="p">),</span> <span class="n">num_predictions</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">anomaly_vec</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">num_predictions</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int8</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cluster_PFSAs</span><span class="p">)):</span>
             <span class="n">curr_llks</span> <span class="o">=</span> <span class="n">Llk</span><span class="p">(</span><span class="n">seqfile</span><span class="o">=</span><span class="n">seqfile</span><span class="p">,</span> <span class="n">pfsafile</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cluster_PFSAs</span><span class="p">[</span><span class="n">i</span><span class="p">])</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
             <span class="n">cluster_llk_vec</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">curr_llks</span>
@@ -194,7 +213,7 @@
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">predictions</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
             <span class="n">predictions</span> <span class="o">=</span> <span class="n">predictions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
-        <span class="k">if</span> <span class="n">seqfile</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_file</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">seqfile</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_file</span> <span class="ow">and</span> <span class="n">clean</span><span class="p">:</span>
             <span class="n">os_remove</span><span class="p">(</span><span class="n">seqfile</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">predictions</span>
@@ -211,9 +230,9 @@
                 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
 
 
-    <span class="k">def</span> <span class="nf">__quantize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">quantize_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;complex&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">__quantize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot; Quantize the data into finite alphabet &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">quantize</span> <span class="ow">or</span> <span class="n">quantize_type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">quantize</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">quantize_type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">X</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">str</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">sep</span><span class="o">=</span><span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="n">header</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="n">how</span><span class="o">=</span><span class="s2">&quot;all&quot;</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
@@ -223,16 +242,18 @@
         <span class="c1"># Quantizer() expects a DataFrame</span>
         <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">X</span><span class="p">)</span> <span class="ow">is</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">:</span>
             <span class="n">X</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span><span class="o">.</span><span class="n">to_frame</span><span class="p">()</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
-        <span class="k">if</span> <span class="n">quantize_type</span> <span class="o">==</span> <span class="s2">&quot;complex&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">quantize_type</span> <span class="o">==</span> <span class="s2">&quot;simple&quot;</span><span class="p">:</span>
+            <span class="c1"># basic differentiation</span>
+            <span class="n">X</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">X</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">row</span> <span class="p">:</span> <span class="n">row</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">n</span> <span class="p">:</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">n</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">0</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">quantize_type</span> <span class="o">==</span> <span class="s2">&quot;complex&quot;</span><span class="p">:</span>
             <span class="c1"># use cythonized quantizer binary</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fitted</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">quantizer</span> <span class="o">=</span> <span class="n">Quantizer</span><span class="p">(</span><span class="n">n_quantizations</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">quantizer</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">quantized</span> <span class="k">for</span> <span class="n">quantized</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">quantizer</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">X</span><span class="p">)],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># basic differentiation</span>
-            <span class="n">X</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">X</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">row</span> <span class="p">:</span> <span class="n">row</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">n</span> <span class="p">:</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">n</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">0</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown quantize type: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">quantize_type</span><span class="si">}</span><span class="s2">. Choose </span><span class="se">\&quot;</span><span class="s2">simple</span><span class="se">\&quot;</span><span class="s2"> or </span><span class="se">\&quot;</span><span class="s2">complex</span><span class="se">\&quot;</span><span class="s2">.&quot;</span><span class="p">)</span>
 
 
     <span class="k">def</span> <span class="nf">__calculate_dist_matrix</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -261,13 +282,16 @@
         <span class="n">n_clusters</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">clusters</span><span class="p">))</span> <span class="o">-</span> <span class="p">(</span><span class="mi">1</span> <span class="k">if</span> <span class="o">-</span><span class="mi">1</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">clusters</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span>
         <span class="n">X</span><span class="p">[</span><span class="s2">&quot;cluster&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">clusters</span>
         <span class="n">cluster_files</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_clusters</span><span class="p">):</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
-                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Writing cluster </span><span class="si">{</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">n_clusters</span><span class="si">}</span><span class="s2"> to file...&quot;</span><span class="p">)</span>
-            <span class="n">cluster_files</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">RANDOM_NAME</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">temp_dir</span><span class="p">))</span>
-            <span class="n">X</span><span class="p">[</span><span class="n">X</span><span class="p">[</span><span class="s2">&quot;cluster&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">i</span><span class="p">]</span> \
-                <span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="s2">&quot;cluster&quot;</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> \
-                <span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">cluster_files</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">sep</span><span class="o">=</span><span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="n">header</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">float_format</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">%g</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">n_clusters</span> <span class="o">==</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">cluster_files</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_file</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_clusters</span><span class="p">):</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Writing cluster </span><span class="si">{</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">n_clusters</span><span class="si">}</span><span class="s2"> to file...&quot;</span><span class="p">)</span>
+                <span class="n">cluster_files</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">RANDOM_NAME</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">temp_dir</span><span class="p">))</span>
+                <span class="n">X</span><span class="p">[</span><span class="n">X</span><span class="p">[</span><span class="s2">&quot;cluster&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">i</span><span class="p">]</span> \
+                    <span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="s2">&quot;cluster&quot;</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> \
+                    <span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">cluster_files</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">sep</span><span class="o">=</span><span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="n">header</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">float_format</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">%g</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">cluster_files</span> <span class="o">=</span> <span class="n">cluster_files</span>
 
 
@@ -335,6 +359,7 @@
         <span class="n">anomaly_sensitivity</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">clustering_alg</span> <span class="o">=</span> <span class="n">KMeans</span><span class="p">(),</span>
         <span class="n">quantize</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">quantize_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;complex&quot;</span><span class="p">,</span>
         <span class="n">eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
         <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -346,6 +371,8 @@
 <span class="sd">            cluster_alg (sklearn.cluster, optional): clustering algorithm to use</span>
 <span class="sd">                                                     (Default = KMeans())\n</span>
 <span class="sd">            quantize (bool, optional): whether to quantize the data (Default = True)\n</span>
+<span class="sd">            quantize_type (str, optional): type of quantization to use (&quot;complex&quot; or &quot;simple&quot;)</span>
+<span class="sd">                                           (Default = &quot;complex&quot;)\n</span>
 <span class="sd">            eps (float, optional): epsilon parameter for finding PFSAs (Default = 0.1)\n</span>
 <span class="sd">            verbose (bool, optional): whether to print verbose output (Default = False)\n</span>
 
@@ -354,6 +381,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">anomaly_sensitivity</span> <span class="o">=</span> <span class="n">anomaly_sensitivity</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">clustering_alg</span> <span class="o">=</span> <span class="n">clustering_alg</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">quantize</span> <span class="o">=</span> <span class="n">quantize</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">quantize_type</span> <span class="o">=</span> <span class="n">quantize_type</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">eps</span> <span class="o">=</span> <span class="n">eps</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">temp_dir</span> <span class="o">=</span> <span class="s2">&quot;zed_temp&quot;</span>
@@ -397,13 +425,14 @@
         <span class="k">return</span> <span class="bp">self</span>
 
 
-    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">bool</span><span class="p">]]:</span>
+    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">clean</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">bool</span><span class="p">]]:</span>
         <span class="sd">&quot;&quot;&quot; Predict whether a time series sequence is anomalous</span>
 
 <span class="sd">        Args:</span>
 
-<span class="sd">            X (pd.DataFrame or str, optional): time series data to find anomalies, if None then</span>
-<span class="sd">                                               predicts on original data (Default = None)</span>
+<span class="sd">            X (pd.DataFrame or pd.Series or str, optional): time series data to find anomalies, if None then</span>
+<span class="sd">                                                            predicts on original data (Default = None)</span>
+<span class="sd">            clean (bool, optional): whether to remove temp files (Default = True)</span>
 
 <span class="sd">        Returns:</span>
 
@@ -411,24 +440,38 @@
 <span class="sd">                                output shape depends on input</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">seqfile</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="n">num_predictions</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="c1"># commonly want to find anomalies in original data</span>
         <span class="k">if</span> <span class="n">X</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">seqfile</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_file</span>
+            <span class="n">num_predictions</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">clusters</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">X</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">str</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">quantize</span><span class="p">:</span>
-                <span class="n">seqfile</span> <span class="o">=</span> <span class="n">X</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">seqfile</span> <span class="o">=</span> <span class="n">RANDOM_NAME</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">temp_dir</span><span class="p">,</span> <span class="n">clean</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">__quantize</span><span class="p">(</span><span class="n">X</span><span class="p">)</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span>
-                    <span class="n">seqfile</span><span class="p">,</span>
-                    <span class="n">sep</span><span class="o">=</span><span class="s2">&quot; &quot;</span><span class="p">,</span>
-                    <span class="n">line_terminator</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot; &quot;</span> <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">X</span><span class="p">)</span> <span class="ow">is</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span> <span class="k">else</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">),</span>
-                    <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                    <span class="n">header</span><span class="o">=</span><span class="kc">False</span>
-                <span class="p">)</span>
+            <span class="c1"># if type(X) is str and not self.quantize:</span>
+            <span class="c1">#     seqfile = X</span>
+            <span class="c1"># else:</span>
+            <span class="n">is_series</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">X</span><span class="p">)</span> <span class="ow">is</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span>
+            <span class="n">seqfile</span> <span class="o">=</span> <span class="n">RANDOM_NAME</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">temp_dir</span><span class="p">,</span> <span class="n">clean</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">X_quantized</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__quantize</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+            <span class="n">X_quantized</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span>
+                <span class="n">seqfile</span><span class="p">,</span>
+                <span class="n">sep</span><span class="o">=</span><span class="s2">&quot; &quot;</span><span class="p">,</span>
+                <span class="n">line_terminator</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot; &quot;</span> <span class="k">if</span> <span class="n">is_series</span> <span class="k">else</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">),</span>
+                <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">header</span><span class="o">=</span><span class="kc">False</span>
+            <span class="p">)</span>
 
-        <span class="n">cluster_llk_vec</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">([</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cluster_PFSAs</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">clusters</span><span class="p">)],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">anomaly_vec</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">clusters</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int8</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">is_series</span><span class="p">:</span>
+                <span class="n">num_predictions</span> <span class="o">=</span> <span class="mi">1</span>
+                <span class="c1"># remove trailing space because it affects llk calculation</span>
+                <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">seqfile</span><span class="p">,</span> <span class="s2">&quot;r+&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                    <span class="n">line</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">f</span><span class="p">)</span><span class="o">.</span><span class="n">rstrip</span><span class="p">()</span>
+                    <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+                    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">line</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">num_predictions</span> <span class="o">=</span> <span class="n">X_quantized</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="n">cluster_llk_vec</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">([</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cluster_PFSAs</span><span class="p">),</span> <span class="n">num_predictions</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">anomaly_vec</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">num_predictions</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int8</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cluster_PFSAs</span><span class="p">)):</span>
             <span class="n">curr_llks</span> <span class="o">=</span> <span class="n">Llk</span><span class="p">(</span><span class="n">seqfile</span><span class="o">=</span><span class="n">seqfile</span><span class="p">,</span> <span class="n">pfsafile</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cluster_PFSAs</span><span class="p">[</span><span class="n">i</span><span class="p">])</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
             <span class="n">cluster_llk_vec</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">curr_llks</span>
@@ -444,7 +487,7 @@
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">predictions</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
             <span class="n">predictions</span> <span class="o">=</span> <span class="n">predictions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
-        <span class="k">if</span> <span class="n">seqfile</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_file</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">seqfile</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_file</span> <span class="ow">and</span> <span class="n">clean</span><span class="p">:</span>
             <span class="n">os_remove</span><span class="p">(</span><span class="n">seqfile</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">predictions</span>
@@ -461,9 +504,9 @@
                 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
 
 
-    <span class="k">def</span> <span class="nf">__quantize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">quantize_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;complex&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">__quantize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
         <span class="sd">&quot;&quot;&quot; Quantize the data into finite alphabet &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">quantize</span> <span class="ow">or</span> <span class="n">quantize_type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">quantize</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">quantize_type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">X</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">str</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">sep</span><span class="o">=</span><span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="n">header</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="n">how</span><span class="o">=</span><span class="s2">&quot;all&quot;</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
@@ -473,16 +516,18 @@
         <span class="c1"># Quantizer() expects a DataFrame</span>
         <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">X</span><span class="p">)</span> <span class="ow">is</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">:</span>
             <span class="n">X</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span><span class="o">.</span><span class="n">to_frame</span><span class="p">()</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
-        <span class="k">if</span> <span class="n">quantize_type</span> <span class="o">==</span> <span class="s2">&quot;complex&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">quantize_type</span> <span class="o">==</span> <span class="s2">&quot;simple&quot;</span><span class="p">:</span>
+            <span class="c1"># basic differentiation</span>
+            <span class="n">X</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">X</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">row</span> <span class="p">:</span> <span class="n">row</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">n</span> <span class="p">:</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">n</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">0</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">quantize_type</span> <span class="o">==</span> <span class="s2">&quot;complex&quot;</span><span class="p">:</span>
             <span class="c1"># use cythonized quantizer binary</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fitted</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">quantizer</span> <span class="o">=</span> <span class="n">Quantizer</span><span class="p">(</span><span class="n">n_quantizations</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">quantizer</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">quantized</span> <span class="k">for</span> <span class="n">quantized</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">quantizer</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">X</span><span class="p">)],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># basic differentiation</span>
-            <span class="n">X</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">X</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">row</span> <span class="p">:</span> <span class="n">row</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">n</span> <span class="p">:</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">n</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">0</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown quantize type: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">quantize_type</span><span class="si">}</span><span class="s2">. Choose </span><span class="se">\&quot;</span><span class="s2">simple</span><span class="se">\&quot;</span><span class="s2"> or </span><span class="se">\&quot;</span><span class="s2">complex</span><span class="se">\&quot;</span><span class="s2">.&quot;</span><span class="p">)</span>
 
 
     <span class="k">def</span> <span class="nf">__calculate_dist_matrix</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -511,13 +556,16 @@
         <span class="n">n_clusters</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">clusters</span><span class="p">))</span> <span class="o">-</span> <span class="p">(</span><span class="mi">1</span> <span class="k">if</span> <span class="o">-</span><span class="mi">1</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">clusters</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span>
         <span class="n">X</span><span class="p">[</span><span class="s2">&quot;cluster&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">clusters</span>
         <span class="n">cluster_files</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_clusters</span><span class="p">):</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
-                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Writing cluster </span><span class="si">{</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">n_clusters</span><span class="si">}</span><span class="s2"> to file...&quot;</span><span class="p">)</span>
-            <span class="n">cluster_files</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">RANDOM_NAME</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">temp_dir</span><span class="p">))</span>
-            <span class="n">X</span><span class="p">[</span><span class="n">X</span><span class="p">[</span><span class="s2">&quot;cluster&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">i</span><span class="p">]</span> \
-                <span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="s2">&quot;cluster&quot;</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> \
-                <span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">cluster_files</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">sep</span><span class="o">=</span><span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="n">header</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">float_format</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">%g</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">n_clusters</span> <span class="o">==</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">cluster_files</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_file</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_clusters</span><span class="p">):</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Writing cluster </span><span class="si">{</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">n_clusters</span><span class="si">}</span><span class="s2"> to file...&quot;</span><span class="p">)</span>
+                <span class="n">cluster_files</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">RANDOM_NAME</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">temp_dir</span><span class="p">))</span>
+                <span class="n">X</span><span class="p">[</span><span class="n">X</span><span class="p">[</span><span class="s2">&quot;cluster&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">i</span><span class="p">]</span> \
+                    <span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="s2">&quot;cluster&quot;</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> \
+                    <span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">cluster_files</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">sep</span><span class="o">=</span><span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="n">header</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">float_format</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">%g</span><span class="s2">&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">cluster_files</span> <span class="o">=</span> <span class="n">cluster_files</span>
 
 
@@ -578,6 +626,7 @@
     anomaly_sensitivity: float = 1,
     clustering_alg=KMeans(),
     quantize: bool = True,
+    quantize_type: str = &#39;complex&#39;,
     eps: float = 0.1,
     verbose: bool = False
 )</span>
@@ -591,6 +640,7 @@
         <span class="n">anomaly_sensitivity</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">clustering_alg</span> <span class="o">=</span> <span class="n">KMeans</span><span class="p">(),</span>
         <span class="n">quantize</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">quantize_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;complex&quot;</span><span class="p">,</span>
         <span class="n">eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
         <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -602,6 +652,8 @@
 <span class="sd">            cluster_alg (sklearn.cluster, optional): clustering algorithm to use</span>
 <span class="sd">                                                     (Default = KMeans())\n</span>
 <span class="sd">            quantize (bool, optional): whether to quantize the data (Default = True)\n</span>
+<span class="sd">            quantize_type (str, optional): type of quantization to use (&quot;complex&quot; or &quot;simple&quot;)</span>
+<span class="sd">                                           (Default = &quot;complex&quot;)\n</span>
 <span class="sd">            eps (float, optional): epsilon parameter for finding PFSAs (Default = 0.1)\n</span>
 <span class="sd">            verbose (bool, optional): whether to print verbose output (Default = False)\n</span>
 
@@ -610,6 +662,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">anomaly_sensitivity</span> <span class="o">=</span> <span class="n">anomaly_sensitivity</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">clustering_alg</span> <span class="o">=</span> <span class="n">clustering_alg</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">quantize</span> <span class="o">=</span> <span class="n">quantize</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">quantize_type</span> <span class="o">=</span> <span class="n">quantize_type</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">eps</span> <span class="o">=</span> <span class="n">eps</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">temp_dir</span> <span class="o">=</span> <span class="s2">&quot;zed_temp&quot;</span>
@@ -641,6 +694,9 @@ cluster_alg (sklearn.cluster, optional): clustering algorithm to use
                                          (Default = KMeans())
 
 quantize (bool, optional): whether to quantize the data (Default = True)
+
+quantize_type (str, optional): type of quantization to use ("complex" or "simple")
+                               (Default = "complex")
 
 eps (float, optional): epsilon parameter for finding PFSAs (Default = 0.1)
 
@@ -709,19 +765,22 @@ y (pd.Series, optional): labels for X only provided for sklearn standard
             <span class="def">def</span>
             <span class="name">predict</span><span class="signature">(
     self,
-    X: Union[pandas.core.frame.DataFrame, str] = None
+    X: Union[pandas.core.frame.DataFrame, pandas.core.series.Series, str] = None,
+    *,
+    clean: bool = True
 ) -&gt; Union[bool, list[bool]]</span>:
     </div>
 
                 <details>
             <summary>View Source</summary>
-            <div class="codehilite"><pre><span></span>    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">bool</span><span class="p">]]:</span>
+            <div class="codehilite"><pre><span></span>    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">clean</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">bool</span><span class="p">]]:</span>
         <span class="sd">&quot;&quot;&quot; Predict whether a time series sequence is anomalous</span>
 
 <span class="sd">        Args:</span>
 
-<span class="sd">            X (pd.DataFrame or str, optional): time series data to find anomalies, if None then</span>
-<span class="sd">                                               predicts on original data (Default = None)</span>
+<span class="sd">            X (pd.DataFrame or pd.Series or str, optional): time series data to find anomalies, if None then</span>
+<span class="sd">                                                            predicts on original data (Default = None)</span>
+<span class="sd">            clean (bool, optional): whether to remove temp files (Default = True)</span>
 
 <span class="sd">        Returns:</span>
 
@@ -729,24 +788,38 @@ y (pd.Series, optional): labels for X only provided for sklearn standard
 <span class="sd">                                output shape depends on input</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">seqfile</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="n">num_predictions</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="c1"># commonly want to find anomalies in original data</span>
         <span class="k">if</span> <span class="n">X</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">seqfile</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_file</span>
+            <span class="n">num_predictions</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">clusters</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">X</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">str</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">quantize</span><span class="p">:</span>
-                <span class="n">seqfile</span> <span class="o">=</span> <span class="n">X</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">seqfile</span> <span class="o">=</span> <span class="n">RANDOM_NAME</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">temp_dir</span><span class="p">,</span> <span class="n">clean</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">__quantize</span><span class="p">(</span><span class="n">X</span><span class="p">)</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span>
-                    <span class="n">seqfile</span><span class="p">,</span>
-                    <span class="n">sep</span><span class="o">=</span><span class="s2">&quot; &quot;</span><span class="p">,</span>
-                    <span class="n">line_terminator</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot; &quot;</span> <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">X</span><span class="p">)</span> <span class="ow">is</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span> <span class="k">else</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">),</span>
-                    <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-                    <span class="n">header</span><span class="o">=</span><span class="kc">False</span>
-                <span class="p">)</span>
+            <span class="c1"># if type(X) is str and not self.quantize:</span>
+            <span class="c1">#     seqfile = X</span>
+            <span class="c1"># else:</span>
+            <span class="n">is_series</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">X</span><span class="p">)</span> <span class="ow">is</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span>
+            <span class="n">seqfile</span> <span class="o">=</span> <span class="n">RANDOM_NAME</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">temp_dir</span><span class="p">,</span> <span class="n">clean</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">X_quantized</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__quantize</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+            <span class="n">X_quantized</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span>
+                <span class="n">seqfile</span><span class="p">,</span>
+                <span class="n">sep</span><span class="o">=</span><span class="s2">&quot; &quot;</span><span class="p">,</span>
+                <span class="n">line_terminator</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot; &quot;</span> <span class="k">if</span> <span class="n">is_series</span> <span class="k">else</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">),</span>
+                <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">header</span><span class="o">=</span><span class="kc">False</span>
+            <span class="p">)</span>
 
-        <span class="n">cluster_llk_vec</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">([</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cluster_PFSAs</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">clusters</span><span class="p">)],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">anomaly_vec</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">clusters</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int8</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">is_series</span><span class="p">:</span>
+                <span class="n">num_predictions</span> <span class="o">=</span> <span class="mi">1</span>
+                <span class="c1"># remove trailing space because it affects llk calculation</span>
+                <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">seqfile</span><span class="p">,</span> <span class="s2">&quot;r+&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                    <span class="n">line</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">f</span><span class="p">)</span><span class="o">.</span><span class="n">rstrip</span><span class="p">()</span>
+                    <span class="n">f</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+                    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">line</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">num_predictions</span> <span class="o">=</span> <span class="n">X_quantized</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="n">cluster_llk_vec</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">([</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cluster_PFSAs</span><span class="p">),</span> <span class="n">num_predictions</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">anomaly_vec</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">num_predictions</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int8</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cluster_PFSAs</span><span class="p">)):</span>
             <span class="n">curr_llks</span> <span class="o">=</span> <span class="n">Llk</span><span class="p">(</span><span class="n">seqfile</span><span class="o">=</span><span class="n">seqfile</span><span class="p">,</span> <span class="n">pfsafile</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cluster_PFSAs</span><span class="p">[</span><span class="n">i</span><span class="p">])</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
             <span class="n">cluster_llk_vec</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">curr_llks</span>
@@ -762,7 +835,7 @@ y (pd.Series, optional): labels for X only provided for sklearn standard
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">predictions</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
             <span class="n">predictions</span> <span class="o">=</span> <span class="n">predictions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
-        <span class="k">if</span> <span class="n">seqfile</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_file</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">seqfile</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_file</span> <span class="ow">and</span> <span class="n">clean</span><span class="p">:</span>
             <span class="n">os_remove</span><span class="p">(</span><span class="n">seqfile</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">predictions</span>
@@ -774,8 +847,9 @@ y (pd.Series, optional): labels for X only provided for sklearn standard
 
 <p>Args:</p>
 
-<pre><code>X (pd.DataFrame or str, optional): time series data to find anomalies, if None then
-                                   predicts on original data (Default = None)
+<pre><code>X (pd.DataFrame or pd.Series or str, optional): time series data to find anomalies, if None then
+                                                predicts on original data (Default = None)
+clean (bool, optional): whether to remove temp files (Default = True)
 </code></pre>
 
 <p>Returns:</p>
