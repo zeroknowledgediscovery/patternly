@@ -3,7 +3,7 @@ patternly
 ===============
 
 .. image:: http://zed.uchicago.edu/logo/patternly.png
-   :height: 100px
+   :height: 200px
    :alt: patternly logo
    :align: center
 
@@ -12,7 +12,7 @@ patternly
 :Info: Paper draft link will be posted here
 :Author: ZeD@UChicago <zed.uchicago.edu>
 :Description: Discovery of emergent anomalies in data streams without explicit  prior models of correct or aberrant behavior, based on the modeling of ergodic, quasi-stationary finite valued processes as probabilistic finite state automata (PFSA_).
-:Documentation: https://zeroknowledgediscovery.github.io/patternly/patternly/detection.html
+:Documentation: https://zeroknowledgediscovery.github.io/patternly
 
 .. _PFSA: https://pubmed.ncbi.nlm.nih.gov/23277601/
 
@@ -21,14 +21,8 @@ patternly
 
 .. code-block::
 
-    pip install patternly
+    pip install patternly --user -U
 
-
-**Documentation**
-
-See `docs`_.
-
-.. _docs: https://zeroknowledgediscovery.github.io/patternly
 
 **Usage:**
 
