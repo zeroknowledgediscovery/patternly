@@ -1,4 +1,11 @@
 """
+Detecting emergent anomlaies in data streams without
+prior specification of templates of anomalous 
+dynamics. Uses Probabilistic Finite Automata 
+moels to infer classes of normal behaviors, and
+emergent anomalies. 
+
+
 Installation:
    ```
       pip install patternly

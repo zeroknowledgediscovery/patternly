@@ -2,9 +2,9 @@
 patternly
 ===============
 
-.. image:: http://zed.uchicago.edu/logo/mantislogo1.png
-   :height: 50px
-   :alt: mantis logo
+.. image:: http://zed.uchicago.edu/logo/patternly.png
+   :height: 100px
+   :alt: patternly logo
    :align: center
 
 .. class:: no-web no-pdf
