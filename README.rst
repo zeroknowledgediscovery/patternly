@@ -19,6 +19,17 @@ patternly
 
 **Installation:**
 
+.. code-block::
+
+    pip install patternly
+
+
+**Documentation**
+
+See `docs`_.
+
+.. _docs: https://zeroknowledgediscovery.github.io/patternly
+
 **Usage:**
 
 See `examples`_.

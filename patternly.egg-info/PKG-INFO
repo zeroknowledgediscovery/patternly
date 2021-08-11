@@ -1,0 +1,63 @@
+Metadata-Version: 2.1
+Name: patternly
+Version: 0.0.10
+Summary: A tool for detecting anomalies in time series data
+Home-page: https://github.com/zeroknowledgediscovery/mantis
+Author: @zedlab_
+Author-email: ishanu@uchicago.edu
+License: LICENSE
+Download-URL: https://github.com/zeroknowledgediscovery/mantis/archive/0.0.10.tar.gz
+Description: ===============
+        patternly
+        ===============
+        
+        .. image:: http://zed.uchicago.edu/logo/patternly.png
+           :height: 100px
+           :alt: patternly logo
+           :align: center
+        
+        .. class:: no-web no-pdf
+        
+        :Info: Paper draft link will be posted here
+        :Author: ZeD@UChicago <zed.uchicago.edu>
+        :Description: Discovery of emergent anomalies in data streams without explicit  prior models of correct or aberrant behavior, based on the modeling of ergodic, quasi-stationary finite valued processes as probabilistic finite state automata (PFSA_).
+        :Documentation: https://zeroknowledgediscovery.github.io/patternly/patternly/detection.html
+        
+        .. _PFSA: https://pubmed.ncbi.nlm.nih.gov/23277601/
+        
+        
+        **Installation:**
+        
+        .. code-block::
+        
+            pip install patternly
+        
+        
+        **Documentation**
+        
+        See `docs`_.
+        
+        .. _docs: https://zeroknowledgediscovery.github.io/patternly
+        
+        **Usage:**
+        
+        See `examples`_.
+        
+        .. _examples: https://github.com/zeroknowledgediscovery/patternly/tree/main/examples
+        
+        .. code-block::
+        
+            from patternly.detection import AnomalyDetection
+        
+        
+Keywords: anomaly detection,timeseries,model-free,adaptive
+Platform: UNKNOWN
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: Topic :: Scientific/Engineering :: Information Analysis
+Classifier: Topic :: Software Development :: Libraries
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3.6
+Requires-Python: >=3.6
+Description-Content-Type: text/x-rst
