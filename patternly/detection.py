@@ -23,14 +23,14 @@ class AnomalyDetection:
         Args:
 
             anomaly_sensitivity (float, optional): how many standard deviations above the mean
-                                                   llk to consider an anomaly (Default = 1)\n
+                                                   llk to consider an anomaly (Default = 1)
             cluster_alg (sklearn.cluster, optional): clustering algorithm to use
-                                                     (Default = KMeans())\n
-            quantize (bool, optional): whether to quantize the data (Default = True)\n
+                                                     (Default = KMeans())
+            quantize (bool, optional): whether to quantize the data (Default = True)
             quantize_type (str, optional): type of quantization to use ("complex" or "simple")
-                                           (Default = "complex")\n
-            eps (float, optional): epsilon parameter for finding PFSAs (Default = 0.1)\n
-            verbose (bool, optional): whether to print verbose output (Default = False)\n
+                                           (Default = "complex")
+            eps (float, optional): epsilon parameter for finding PFSAs (Default = 0.1)
+            verbose (bool, optional): whether to print verbose output (Default = False)
 
         """
 
@@ -207,7 +207,17 @@ class AnomalyDetection:
         """ Cluster distance matrix """
         if self.verbose:
             print("Clustering distance matrix...")
-        self.clusters = self.clustering_alg.fit(self.dist_matrix).labels_
+        clusters = self.clustering_alg.fit(self.dist_matrix).labels_
+        n_clusters = len(set(clusters)) - (1 if -1 in clusters else 0)
+
+        # reassign clusters such that cluster 0 is the most common label, 1 is the second most common, etc.
+        cluster_counts = np.zeros(n_clusters, dtype=np.int8)
+        for cluster in clusters:
+            cluster_counts[cluster] += 1
+        cluster_rank = np.full(n_clusters, n_clusters - 1, dtype=np.int8) - np.argsort(cluster_counts)
+        clusters = [cluster_rank[cluster] for cluster in clusters]
+
+        self.clusters = clusters
 
 
     def __write_cluster_files(self, X):
@@ -264,7 +274,8 @@ class AnomalyDetection:
 
     def __calculate_PFSA_stats(self):
         """ Calculate the means and standard deviations of llks for each PFSA
-            to later determine if a sequence is an anomaly """
+            to later determine if a sequence is an anomaly
+        """
         if self.verbose:
             print("Calculating cluster PFSA means and stds...")
         PFSA_llk_means = []
