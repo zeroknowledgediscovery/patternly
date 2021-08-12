@@ -285,3 +285,33 @@ class AnomalyDetection:
             PFSA_llk_means.append(np.mean(llks))
             PFSA_llk_stds.append(np.std(llks))
         self.PFSA_llk_means, self.PFSA_llk_stds = PFSA_llk_means, PFSA_llk_stds
+
+
+class StreamingDetection(AnomalyDetection):
+    def __init__(self, *, window_size=1000, window_overlap=0, **kwargs):
+        super().__init__(**kwargs)
+        self.window_size = window_size
+        self.window_overlap = window_overlap
+
+    def fit(self, X, y=None):
+        X_split_streams = self.__split_streams(X)
+        super().fit(X_split_streams)
+
+    def predict(self, X=None):
+        if X is None:
+            return super().predict(X)
+        else:
+            X_split_streams = self.__split_streams(X)
+            return super().predict(X_split_streams)
+
+    def __split_streams(self, X):
+        """ Split stream data into individual streams of length self.window_size
+            that overlap by self.overlap
+        """
+        beg = lambda i: (self.window_size * i) - (self.window_overlap * i)
+        end = lambda i: beg(i) + self.window_size
+        size = X.shape[0] // (self.window_size - self.window_overlap)
+        return pd.concat(
+            [X[beg(i):end(i)].reset_index(drop=True) for i in range(size)],
+            axis=1
+        ).T
