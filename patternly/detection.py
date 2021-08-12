@@ -1,6 +1,7 @@
+import os
+import pickle
 import numpy as np
 import pandas as pd
-import pickle
 from sklearn.cluster import KMeans
 from zedsuite.zutil import Llk, Lsmash
 from zedsuite.genesess import GenESeSS
@@ -99,7 +100,7 @@ class AnomalyDetection:
         seqfile = ""
         num_predictions = 0
         # commonly want to find anomalies in original data
-        if X is None:
+        if X is None and os.path.isfile(self.data_file):
             seqfile = self.data_file
             num_predictions = len(self.clusters)
         else:
@@ -152,7 +153,7 @@ class AnomalyDetection:
         return predictions
 
 
-    def save_model(self, path):
+    def save_model(self, path="patternly_model.pickle"):
         """ Save model to file
 
         Args:
@@ -162,8 +163,80 @@ class AnomalyDetection:
         if not self.fitted:
             raise ValueError("Model has not been fit yet")
 
-        # with open(path, "wb") as f:
-        #     pickle.dump(self, f)
+        pfsa_objs = {}
+        for i, cluster_file in enumerate(self.cluster_PFSAs):
+            with open(cluster_file, "r") as f:
+                # parse PFSA file
+                next_val = lambda f: next(f).split(":")[1].strip()
+                ann_err = float(next_val(f))
+                mrg_eps = float(next_val(f))
+                syn_str = next_val(f)
+                sym_frq = [float(n) for n in next_val(f).split(" ")]
+                size = int(next_val(f).split("(")[1].split(")")[0])
+                next(f) # skip #PITILDE line
+                pitilde = [[float(val) for val in next(f).strip().split(" ")] for _ in range(size)]
+                size = int(next_val(f).split("(")[1].split(")")[0])
+                next(f) # skip #CONNX line
+                connx = [[int(val) for val in next(f).strip().split(" ")] for _ in range(size)]
+
+                pfsa_objs[i] = {
+                    "%ANN_ERR": ann_err,
+                    "%MRG_EPS": mrg_eps,
+                    "%SYN_STR": syn_str,
+                    "%SYM_FRQ": sym_frq,
+                    "%PITILDE": pitilde,
+                    "%CONNX": connx,
+                }
+
+        model = {
+            "self": self,
+            "PFSAs": pfsa_objs,
+        }
+
+        with open(path, "wb") as f:
+            pickle.dump(model, f)
+
+
+    @staticmethod
+    def load_model(path="patternly_model.pickle"):
+        """ Load saved model
+
+            Args:
+                path (str): path to saved model
+        """
+
+        with open(path, "rb") as f:
+            model = pickle.load(f)
+
+        self = model["self"]
+        pfsa_objs = model["PFSAs"]
+
+        # write PFSA files
+        for i in range(self.n_clusters):
+            self.cluster_PFSAs[i] = RANDOM_NAME(path=self.temp_dir)
+            with open(self.cluster_PFSAs[i], "w") as f:
+                f.write(f"%ANN_ERR: {pfsa_objs[i]['%ANN_ERR']}\n")
+                f.write(f"%MRG_EPS: {pfsa_objs[i]['%MRG_EPS']}\n")
+                f.write(f"%SYN_STR: {pfsa_objs[i]['%SYN_STR']}\n")
+                f.write(f"%SYM_FRQ: ")
+                for sym_frq in pfsa_objs[i]["%SYM_FRQ"]:
+                    suffix = " " if str(sym_frq) != str(pfsa_objs[i]["%SYM_FRQ"][-1]) else " \n"
+                    f.write(f"{sym_frq}{suffix}")
+                f.write(f"%PITILDE: size({len(pfsa_objs[i]['%PITILDE'])})\n")
+                f.write(f"#PITILDE\n")
+                for pitilde in pfsa_objs[i]["%PITILDE"]:
+                    for val in pitilde:
+                        suffix = " " if str(val) != str(pitilde[-1]) else " \n"
+                        f.write(f"{val}{suffix}")
+                f.write(f"%CONNX: size({len(pfsa_objs[i]['%CONNX'])})\n")
+                f.write(f"#CONNX\n")
+                for connx in pfsa_objs[i]["%CONNX"]:
+                    for val in connx:
+                        suffix = " " if str(val) != str(connx[-1]) else " \n"
+                        f.write(f"{val}{suffix}")
+                f.write("\n")
+
+        return self
 
 
     def print_PFSAs(self):
@@ -381,3 +454,4 @@ class StreamingDetection(AnomalyDetection):
             [X[beg(i):end(i)].reset_index(drop=True) for i in range(size)],
             axis=1
         ).T
+
