@@ -27,8 +27,7 @@
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">from typing import Union
-import numpy as np
+<pre><code class="python">import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 from zedsuite.zutil import Llk, Lsmash
@@ -42,12 +41,12 @@ class AnomalyDetection:
     def __init__(
         self,
         *,
-        anomaly_sensitivity: float = 1,
-        clustering_alg = KMeans(),
-        quantize: bool = True,
-        quantize_type: str = &#34;complex&#34;,
-        eps: float = 0.1,
-        verbose: bool = False
+        anomaly_sensitivity=1,
+        clustering_alg=KMeans(),
+        quantize=True,
+        quantize_type=&#34;complex&#34;,
+        eps=0.1,
+        verbose=False
     ) -&gt; None:
         &#34;&#34;&#34;
         Args:
@@ -90,7 +89,7 @@ class AnomalyDetection:
         self.closest_match = None
 
 
-    def fit(self, X: Union[pd.DataFrame, str], y=None):
+    def fit(self, X, y=None):
         &#34;&#34;&#34; Fit an anomaly detection model
 
         Args:
@@ -113,7 +112,7 @@ class AnomalyDetection:
         return self
 
 
-    def predict(self, X: Union[pd.DataFrame, pd.Series, str] = None, *, clean: bool = True) -&gt; Union[bool, list[bool]]:
+    def predict(self, X=None, *, clean=True):
         &#34;&#34;&#34; Predict whether a time series sequence is anomalous
 
         Args:
@@ -182,7 +181,7 @@ class AnomalyDetection:
         return predictions
 
 
-    def print_PFSAs(self) -&gt; None:
+    def print_PFSAs(self):
         &#34;&#34;&#34; Print PFSAs found for each cluster &#34;&#34;&#34;
         properties = [&#34;%ANN_ERR&#34;, &#34;%MRG_EPS&#34;, &#34;%SYN_STR&#34;, &#34;%SYM_FRQ&#34;, &#34;%PITILDE&#34;, &#34;%CONNX&#34;]
         for i in range(len(self.cluster_PFSAs_info)):
@@ -193,7 +192,7 @@ class AnomalyDetection:
                 print(&#34;\n&#34;)
 
 
-    def __quantize(self, X) -&gt; pd.DataFrame:
+    def __quantize(self, X):
         &#34;&#34;&#34; Quantize the data into finite alphabet &#34;&#34;&#34;
         if not self.quantize or self.quantize_type is None:
             if type(X) is str:
@@ -219,7 +218,7 @@ class AnomalyDetection:
             raise ValueError(f&#34;Unknown quantize type: {self.quantize_type}. Choose \&#34;simple\&#34; or \&#34;complex\&#34;.&#34;)
 
 
-    def __calculate_dist_matrix(self, X) -&gt; None:
+    def __calculate_dist_matrix(self, X):
         &#34;&#34;&#34; Calculate distance matrix using lsmash &#34;&#34;&#34;
         if self.verbose:
             print(&#34;Calculating distance matrix...&#34;)
@@ -233,14 +232,14 @@ class AnomalyDetection:
         self.dist_matrix = pd.DataFrame(Lsmash(seqfile=self.data_file, data_type=&#34;symbolic&#34;, sae=False).run()).round(8)
 
 
-    def __calculate_cluster_labels(self) -&gt; None:
+    def __calculate_cluster_labels(self):
         &#34;&#34;&#34; Cluster distance matrix &#34;&#34;&#34;
         if self.verbose:
             print(&#34;Clustering distance matrix...&#34;)
         self.clusters = self.clustering_alg.fit(self.dist_matrix).labels_
 
 
-    def __write_cluster_files(self, X: pd.DataFrame) -&gt; None:
+    def __write_cluster_files(self, X):
         &#34;&#34;&#34; Write cluster time series data to files &#34;&#34;&#34;
         n_clusters = len(set(self.clusters)) - (1 if -1 in self.clusters else 0)
         X[&#34;cluster&#34;] = self.clusters
@@ -258,7 +257,7 @@ class AnomalyDetection:
         self.cluster_files = cluster_files
 
 
-    def __calculate_cluster_PFSAs(self) -&gt; None:
+    def __calculate_cluster_PFSAs(self):
         &#34;&#34;&#34; Infer PFSAs from clusters using genESeSS &#34;&#34;&#34;
         cluster_PFSAs = []
         dot_files = []
@@ -292,7 +291,7 @@ class AnomalyDetection:
         self.dot_files = dot_files
 
 
-    def __calculate_PFSA_stats(self) -&gt; None:
+    def __calculate_PFSA_stats(self):
         &#34;&#34;&#34; Calculate the means and standard deviations of llks for each PFSA
             to later determine if a sequence is an anomaly &#34;&#34;&#34;
         if self.verbose:
@@ -317,7 +316,7 @@ class AnomalyDetection:
 <dl>
 <dt id="patternly.detection.AnomalyDetection"><code class="flex name class">
 <span>class <span class="ident">AnomalyDetection</span></span>
-<span>(</span><span>*, anomaly_sensitivity: float = 1, clustering_alg=KMeans(), quantize: bool = True, quantize_type: str = 'complex', eps: float = 0.1, verbose: bool = False)</span>
+<span>(</span><span>*, anomaly_sensitivity=1, clustering_alg=KMeans(), quantize=True, quantize_type='complex', eps=0.1, verbose=False)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Tool for anomaly detection </p>
@@ -348,12 +347,12 @@ llk to consider an anomaly (Default = 1)</dd>
     def __init__(
         self,
         *,
-        anomaly_sensitivity: float = 1,
-        clustering_alg = KMeans(),
-        quantize: bool = True,
-        quantize_type: str = &#34;complex&#34;,
-        eps: float = 0.1,
-        verbose: bool = False
+        anomaly_sensitivity=1,
+        clustering_alg=KMeans(),
+        quantize=True,
+        quantize_type=&#34;complex&#34;,
+        eps=0.1,
+        verbose=False
     ) -&gt; None:
         &#34;&#34;&#34;
         Args:
@@ -396,7 +395,7 @@ llk to consider an anomaly (Default = 1)</dd>
         self.closest_match = None
 
 
-    def fit(self, X: Union[pd.DataFrame, str], y=None):
+    def fit(self, X, y=None):
         &#34;&#34;&#34; Fit an anomaly detection model
 
         Args:
@@ -419,7 +418,7 @@ llk to consider an anomaly (Default = 1)</dd>
         return self
 
 
-    def predict(self, X: Union[pd.DataFrame, pd.Series, str] = None, *, clean: bool = True) -&gt; Union[bool, list[bool]]:
+    def predict(self, X=None, *, clean=True):
         &#34;&#34;&#34; Predict whether a time series sequence is anomalous
 
         Args:
@@ -488,7 +487,7 @@ llk to consider an anomaly (Default = 1)</dd>
         return predictions
 
 
-    def print_PFSAs(self) -&gt; None:
+    def print_PFSAs(self):
         &#34;&#34;&#34; Print PFSAs found for each cluster &#34;&#34;&#34;
         properties = [&#34;%ANN_ERR&#34;, &#34;%MRG_EPS&#34;, &#34;%SYN_STR&#34;, &#34;%SYM_FRQ&#34;, &#34;%PITILDE&#34;, &#34;%CONNX&#34;]
         for i in range(len(self.cluster_PFSAs_info)):
@@ -499,7 +498,7 @@ llk to consider an anomaly (Default = 1)</dd>
                 print(&#34;\n&#34;)
 
 
-    def __quantize(self, X) -&gt; pd.DataFrame:
+    def __quantize(self, X):
         &#34;&#34;&#34; Quantize the data into finite alphabet &#34;&#34;&#34;
         if not self.quantize or self.quantize_type is None:
             if type(X) is str:
@@ -525,7 +524,7 @@ llk to consider an anomaly (Default = 1)</dd>
             raise ValueError(f&#34;Unknown quantize type: {self.quantize_type}. Choose \&#34;simple\&#34; or \&#34;complex\&#34;.&#34;)
 
 
-    def __calculate_dist_matrix(self, X) -&gt; None:
+    def __calculate_dist_matrix(self, X):
         &#34;&#34;&#34; Calculate distance matrix using lsmash &#34;&#34;&#34;
         if self.verbose:
             print(&#34;Calculating distance matrix...&#34;)
@@ -539,14 +538,14 @@ llk to consider an anomaly (Default = 1)</dd>
         self.dist_matrix = pd.DataFrame(Lsmash(seqfile=self.data_file, data_type=&#34;symbolic&#34;, sae=False).run()).round(8)
 
 
-    def __calculate_cluster_labels(self) -&gt; None:
+    def __calculate_cluster_labels(self):
         &#34;&#34;&#34; Cluster distance matrix &#34;&#34;&#34;
         if self.verbose:
             print(&#34;Clustering distance matrix...&#34;)
         self.clusters = self.clustering_alg.fit(self.dist_matrix).labels_
 
 
-    def __write_cluster_files(self, X: pd.DataFrame) -&gt; None:
+    def __write_cluster_files(self, X):
         &#34;&#34;&#34; Write cluster time series data to files &#34;&#34;&#34;
         n_clusters = len(set(self.clusters)) - (1 if -1 in self.clusters else 0)
         X[&#34;cluster&#34;] = self.clusters
@@ -564,7 +563,7 @@ llk to consider an anomaly (Default = 1)</dd>
         self.cluster_files = cluster_files
 
 
-    def __calculate_cluster_PFSAs(self) -&gt; None:
+    def __calculate_cluster_PFSAs(self):
         &#34;&#34;&#34; Infer PFSAs from clusters using genESeSS &#34;&#34;&#34;
         cluster_PFSAs = []
         dot_files = []
@@ -598,7 +597,7 @@ llk to consider an anomaly (Default = 1)</dd>
         self.dot_files = dot_files
 
 
-    def __calculate_PFSA_stats(self) -&gt; None:
+    def __calculate_PFSA_stats(self):
         &#34;&#34;&#34; Calculate the means and standard deviations of llks for each PFSA
             to later determine if a sequence is an anomaly &#34;&#34;&#34;
         if self.verbose:
@@ -614,7 +613,7 @@ llk to consider an anomaly (Default = 1)</dd>
 <h3>Methods</h3>
 <dl>
 <dt id="patternly.detection.AnomalyDetection.fit"><code class="name flex">
-<span>def <span class="ident">fit</span></span>(<span>self, X: Union[pandas.core.frame.DataFrame, str], y=None)</span>
+<span>def <span class="ident">fit</span></span>(<span>self, X, y=None)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Fit an anomaly detection model</p>
@@ -632,7 +631,7 @@ llk to consider an anomaly (Default = 1)</dd>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def fit(self, X: Union[pd.DataFrame, str], y=None):
+<pre><code class="python">def fit(self, X, y=None):
     &#34;&#34;&#34; Fit an anomaly detection model
 
     Args:
@@ -656,7 +655,7 @@ llk to consider an anomaly (Default = 1)</dd>
 </details>
 </dd>
 <dt id="patternly.detection.AnomalyDetection.predict"><code class="name flex">
-<span>def <span class="ident">predict</span></span>(<span>self, X: Union[pandas.core.frame.DataFrame, pandas.core.series.Series, str] = None, *, clean: bool = True) ‑> Union[bool, list[bool]]</span>
+<span>def <span class="ident">predict</span></span>(<span>self, X=None, *, clean=True)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Predict whether a time series sequence is anomalous</p>
@@ -678,7 +677,7 @@ output shape depends on input</dd>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def predict(self, X: Union[pd.DataFrame, pd.Series, str] = None, *, clean: bool = True) -&gt; Union[bool, list[bool]]:
+<pre><code class="python">def predict(self, X=None, *, clean=True):
     &#34;&#34;&#34; Predict whether a time series sequence is anomalous
 
     Args:
@@ -748,7 +747,7 @@ output shape depends on input</dd>
 </details>
 </dd>
 <dt id="patternly.detection.AnomalyDetection.print_PFSAs"><code class="name flex">
-<span>def <span class="ident">print_PFSAs</span></span>(<span>self) ‑> NoneType</span>
+<span>def <span class="ident">print_PFSAs</span></span>(<span>self)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Print PFSAs found for each cluster</p></div>
@@ -756,7 +755,7 @@ output shape depends on input</dd>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def print_PFSAs(self) -&gt; None:
+<pre><code class="python">def print_PFSAs(self):
     &#34;&#34;&#34; Print PFSAs found for each cluster &#34;&#34;&#34;
     properties = [&#34;%ANN_ERR&#34;, &#34;%MRG_EPS&#34;, &#34;%SYN_STR&#34;, &#34;%SYM_FRQ&#34;, &#34;%PITILDE&#34;, &#34;%CONNX&#34;]
     for i in range(len(self.cluster_PFSAs_info)):
