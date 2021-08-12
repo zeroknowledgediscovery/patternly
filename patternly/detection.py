@@ -129,7 +129,7 @@ class AnomalyDetection:
                 num_predictions = X_quantized.shape[0]
 
         cluster_llk_vec = np.empty([len(self.cluster_PFSAs), num_predictions], dtype=np.float64)
-        anomaly_vec = np.zeros(num_predictions, dtype=np.int8)
+        anomaly_vec = np.zeros(num_predictions, dtype=np.int64)
         for i in range(len(self.cluster_PFSAs)):
             curr_llks = Llk(seqfile=seqfile, pfsafile=self.cluster_PFSAs[i]).run()
             cluster_llk_vec[i] = curr_llks
@@ -211,10 +211,10 @@ class AnomalyDetection:
         n_clusters = len(set(clusters)) - (1 if -1 in clusters else 0)
 
         # reassign clusters such that cluster 0 is the most common label, 1 is the second most common, etc.
-        cluster_counts = np.zeros(n_clusters, dtype=np.int8)
+        cluster_counts = np.zeros(n_clusters, dtype=np.int64)
         for cluster in clusters:
             cluster_counts[cluster] += 1
-        cluster_rank = np.full(n_clusters, n_clusters - 1, dtype=np.int8) - np.argsort(cluster_counts)
+        cluster_rank = np.full(n_clusters, n_clusters - 1, dtype=np.int64) - np.argsort(np.argsort(cluster_counts))
         clusters = [cluster_rank[cluster] for cluster in clusters]
 
         self.clusters = clusters
@@ -288,7 +288,13 @@ class AnomalyDetection:
 
 
 class StreamingDetection(AnomalyDetection):
+    """ Tool for anomaly detection within a single data stream """
     def __init__(self, *, window_size=1000, window_overlap=0, **kwargs):
+        """
+        Args:
+            window_size (int): size of sliding window
+            window_overlap (int): overlap of sliding windows
+        """
         super().__init__(**kwargs)
         self.window_size = window_size
         self.window_overlap = window_overlap
@@ -308,6 +314,8 @@ class StreamingDetection(AnomalyDetection):
         """ Split stream data into individual streams of length self.window_size
             that overlap by self.overlap
         """
+        if (self.verbose):
+            print("Splitting data into individual streams...")
         beg = lambda i: (self.window_size * i) - (self.window_overlap * i)
         end = lambda i: beg(i) + self.window_size
         size = X.shape[0] // (self.window_size - self.window_overlap)
