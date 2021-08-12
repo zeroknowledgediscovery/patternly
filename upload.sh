@@ -15,7 +15,7 @@ echo __version__ = \'$VERSION\'
 echo __version__ = \'$VERSION\' > version.py
 
 git add * -v
-git commit -m $COMMENT
+git commit -m "$COMMENT"
 git push
 
 git tag $VERSION -m $COMMENT
