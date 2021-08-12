@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.9.2" />
+<meta name="generator" content="pdoc 0.10.0" />
 <title>patternly.detection API documentation</title>
 <meta name="description" content="" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
@@ -29,6 +29,7 @@
 </summary>
 <pre><code class="python">import numpy as np
 import pandas as pd
+import pickle
 from sklearn.cluster import KMeans
 from zedsuite.zutil import Llk, Lsmash
 from zedsuite.genesess import GenESeSS
@@ -50,16 +51,13 @@ class AnomalyDetection:
     ) -&gt; None:
         &#34;&#34;&#34;
         Args:
-
-            anomaly_sensitivity (float, optional): how many standard deviations above the mean
-                                                   llk to consider an anomaly (Default = 1)\n
-            cluster_alg (sklearn.cluster, optional): clustering algorithm to use
-                                                     (Default = KMeans())\n
-            quantize (bool, optional): whether to quantize the data (Default = True)\n
-            quantize_type (str, optional): type of quantization to use (&#34;complex&#34; or &#34;simple&#34;)
-                                           (Default = &#34;complex&#34;)\n
-            eps (float, optional): epsilon parameter for finding PFSAs (Default = 0.1)\n
-            verbose (bool, optional): whether to print verbose output (Default = False)\n
+            anomaly_sensitivity (float, optional): how many standard deviations above the mean llk to consider
+                an anomaly (Default = 1)
+            cluster_alg (sklearn.cluster, optional): clustering algorithm to use (Default = KMeans())
+            quantize (bool, optional): whether to quantize the data (Default = True)
+            quantize_type (str, optional): type of quantization to use (&#34;complex&#34; or &#34;simple&#34;) (Default = &#34;complex&#34;)
+            eps (float, optional): epsilon parameter for finding PFSAs (Default = 0.1)
+            verbose (bool, optional): whether to print verbose output (Default = False)
 
         &#34;&#34;&#34;
 
@@ -72,10 +70,11 @@ class AnomalyDetection:
         self.temp_dir = &#34;zed_temp&#34;
 
         # values calculated in self.fit()
-        self._fitted = False               # whether model has been fit
+        self.fitted = False               # whether model has been fit
         self.quantizer = None              # quantizer used for quantizing data
         self.data_file = &#34;&#34;                # file path of original data
         self.dist_matrix = pd.DataFrame()  # calculated by lsmash, used for clustering
+        self.n_clusters = 0                # number of clusters
         self.clusters = []                 # list of cluster labels
         self.cluster_files = []            # list of file paths to clusters
         self.dot_files = []                # list of file paths to PFSA dot files
@@ -93,22 +92,21 @@ class AnomalyDetection:
         &#34;&#34;&#34; Fit an anomaly detection model
 
         Args:
-
             X (pd.DataFrame or str): time series data to be fit
-            y (pd.Series, optional): labels for X only provided for sklearn standard
-                                     (Default = None)
+            y (pd.Series, optional): labels for X only provided for sklearn standard (Default = None)
 
         Returns:
-
             self
         &#34;&#34;&#34;
+
         X_quantized = self.__quantize(X)
         self.__calculate_dist_matrix(X if type(X) is str else X_quantized)
         self.__calculate_cluster_labels()
         self.__write_cluster_files(X_quantized)
         self.__calculate_cluster_PFSAs()
         self.__calculate_PFSA_stats()
-        self._fitted = True
+        self.fitted = True
+
         return self
 
 
@@ -116,16 +114,17 @@ class AnomalyDetection:
         &#34;&#34;&#34; Predict whether a time series sequence is anomalous
 
         Args:
-
             X (pd.DataFrame or pd.Series or str, optional): time series data to find anomalies, if None then
-                                                            predicts on original data (Default = None)
+                predicts on original data (Default = None)
             clean (bool, optional): whether to remove temp files (Default = True)
 
         Returns:
-
-            bool or list[bool]: True if time series is an anomaly, False otherwise
-                                output shape depends on input
+            bool or list[bool]: True if time series is an anomaly, False otherwise output shape depends on input
         &#34;&#34;&#34;
+
+        if not self.fitted:
+            raise ValueError(&#34;Model has not been fit yet&#34;)
+
         seqfile = &#34;&#34;
         num_predictions = 0
         # commonly want to find anomalies in original data
@@ -157,20 +156,21 @@ class AnomalyDetection:
             else:
                 num_predictions = X_quantized.shape[0]
 
-        cluster_llk_vec = np.empty([len(self.cluster_PFSAs), num_predictions], dtype=np.float64)
-        anomaly_vec = np.zeros(num_predictions, dtype=np.int8)
-        for i in range(len(self.cluster_PFSAs)):
+        cluster_llk_vec = np.empty([self.n_clusters, num_predictions], dtype=np.float64)
+        anomaly_vec = np.zeros(num_predictions, dtype=np.int64)
+        for i in range(self.n_clusters):
             curr_llks = Llk(seqfile=seqfile, pfsafile=self.cluster_PFSAs[i]).run()
             cluster_llk_vec[i] = curr_llks
             # classify llk as anomaly if greater than X standard deviations above the mean
             upper_bound = self.PFSA_llk_means[i] + (self.PFSA_llk_stds[i] * self.anomaly_sensitivity)
             for j, llk in enumerate(curr_llks):
                 anomaly_vec[j] += 1 if llk &gt; upper_bound else 0
+
         self.curr_cluster_llk_vec = cluster_llk_vec
         self.closest_match = np.argmin(cluster_llk_vec, axis=0)
 
         # consider to be anomaly if all llks above specified upper bound
-        predictions = [x == len(self.cluster_PFSAs) for x in anomaly_vec]
+        predictions = [x == self.n_clusters for x in anomaly_vec]
 
         if len(predictions) == 1:
             predictions = predictions[0]
@@ -181,10 +181,28 @@ class AnomalyDetection:
         return predictions
 
 
+    def save_model(self, path):
+        &#34;&#34;&#34; Save model to file
+
+        Args:
+            path (str): path to save model to
+        &#34;&#34;&#34;
+
+        if not self.fitted:
+            raise ValueError(&#34;Model has not been fit yet&#34;)
+
+        # with open(path, &#34;wb&#34;) as f:
+        #     pickle.dump(self, f)
+
+
     def print_PFSAs(self):
         &#34;&#34;&#34; Print PFSAs found for each cluster &#34;&#34;&#34;
+
+        if not self.fitted:
+            raise ValueError(&#34;Model has not been fit yet&#34;)
+
         properties = [&#34;%ANN_ERR&#34;, &#34;%MRG_EPS&#34;, &#34;%SYN_STR&#34;, &#34;%SYM_FRQ&#34;, &#34;%PITILDE&#34;, &#34;%CONNX&#34;]
-        for i in range(len(self.cluster_PFSAs_info)):
+        for i in range(self.n_clusters):
             print(f&#34;Cluster {i} PFSA:&#34;)
             for prop in properties:
                 print(f&#34;{prop}: {self.cluster_PFSAs_info[i][prop]}&#34;)
@@ -193,24 +211,32 @@ class AnomalyDetection:
 
 
     def __quantize(self, X):
-        &#34;&#34;&#34; Quantize the data into finite alphabet &#34;&#34;&#34;
+        &#34;&#34;&#34; Quantize the data into finite alphabet
+
+            Args:
+                X (pd.DataFrame or str): time series data to be quantized
+        &#34;&#34;&#34;
+
         if not self.quantize or self.quantize_type is None:
             if type(X) is str:
                 return pd.read_csv(X, sep=&#34; &#34;, header=None, low_memory=False).dropna(how=&#34;all&#34;, axis=1)
             else:
                 return X.copy()
+
         if self.verbose:
             print(&#34;Quantizing...&#34;)
+
         # Quantizer() expects a DataFrame
         if type(X) is pd.Series:
             X = X.copy().to_frame().reset_index(drop=True).T
+
         if self.quantize_type == &#34;simple&#34;:
             # basic differentiation
             X = X.astype(float).diff(axis=1).fillna(0)
             return X.apply(lambda row : row.apply(lambda n : 1 if n &gt; 0 else 0), axis=1)
         elif self.quantize_type == &#34;complex&#34;:
             # use cythonized quantizer binary
-            if not self._fitted:
+            if not self.fitted:
                 self.quantizer = Quantizer(n_quantizations=1, epsilon=-1)
                 self.quantizer.fit(X)
             return pd.concat([quantized for quantized in self.quantizer.transform(X)], axis=1)
@@ -219,9 +245,15 @@ class AnomalyDetection:
 
 
     def __calculate_dist_matrix(self, X):
-        &#34;&#34;&#34; Calculate distance matrix using lsmash &#34;&#34;&#34;
+        &#34;&#34;&#34; Calculate distance matrix using lsmash
+
+            Args:
+                X (pd.DataFrame or str): time series data to calculate distance matrix from
+        &#34;&#34;&#34;
+
         if self.verbose:
             print(&#34;Calculating distance matrix...&#34;)
+
         # don&#39;t create file if it already exists i.e. X is a file path
         if type(X) is str and not self.quantize:
             self.data_file = X
@@ -234,36 +266,55 @@ class AnomalyDetection:
 
     def __calculate_cluster_labels(self):
         &#34;&#34;&#34; Cluster distance matrix &#34;&#34;&#34;
+
         if self.verbose:
             print(&#34;Clustering distance matrix...&#34;)
-        self.clusters = self.clustering_alg.fit(self.dist_matrix).labels_
+
+        clusters = self.clustering_alg.fit(self.dist_matrix).labels_
+        n_clusters = len(set(clusters)) - (1 if -1 in clusters else 0)
+
+        # reassign clusters such that cluster 0 is the most common label, 1 is the second most common, etc.
+        cluster_counts = np.zeros(n_clusters, dtype=np.int64)
+        for cluster in clusters:
+            cluster_counts[cluster] += 1
+        cluster_rank = np.full(n_clusters, n_clusters - 1, dtype=np.int64) - np.argsort(np.argsort(cluster_counts))
+        clusters = [cluster_rank[cluster] for cluster in clusters]
+
+        self.n_clusters = n_clusters
+        self.clusters = clusters
 
 
     def __write_cluster_files(self, X):
-        &#34;&#34;&#34; Write cluster time series data to files &#34;&#34;&#34;
-        n_clusters = len(set(self.clusters)) - (1 if -1 in self.clusters else 0)
+        &#34;&#34;&#34; Write cluster time series data to files
+
+            Args:
+                X (pd.DataFrame or str): time series data to write to files according to cluster
+        &#34;&#34;&#34;
+
         X[&#34;cluster&#34;] = self.clusters
         cluster_files = []
-        if (n_clusters == 1):
+        if (self.n_clusters == 1):
             cluster_files.append(self.data_file)
         else:
-            for i in range(n_clusters):
+            for i in range(self.n_clusters):
                 if self.verbose:
-                    print(f&#34;Writing cluster {i + 1}/{n_clusters} to file...&#34;)
+                    print(f&#34;Writing cluster {i + 1}/{self.n_clusters} to file...&#34;)
                 cluster_files.append(RANDOM_NAME(path=self.temp_dir))
                 X[X[&#34;cluster&#34;] == i] \
                     .drop(&#34;cluster&#34;, axis=1) \
                     .to_csv(cluster_files[i], sep=&#34; &#34;, header=False, index=False, float_format=&#34;%g&#34;)
+
         self.cluster_files = cluster_files
 
 
     def __calculate_cluster_PFSAs(self):
         &#34;&#34;&#34; Infer PFSAs from clusters using genESeSS &#34;&#34;&#34;
+
         cluster_PFSAs = []
         dot_files = []
         for i, cluster_file in enumerate(self.cluster_files):
             if self.verbose:
-                print(f&#34;Generating cluster PFSA {i + 1}/{len(self.cluster_files)}...&#34;)
+                print(f&#34;Generating cluster PFSA {i + 1}/{self.n_clusters}...&#34;)
             PFSA_file = RANDOM_NAME(path=self.temp_dir)
             cluster_PFSAs.append(PFSA_file)
             dot_file = RANDOM_NAME(path=self.temp_dir)
@@ -293,16 +344,72 @@ class AnomalyDetection:
 
     def __calculate_PFSA_stats(self):
         &#34;&#34;&#34; Calculate the means and standard deviations of llks for each PFSA
-            to later determine if a sequence is an anomaly &#34;&#34;&#34;
+            to later determine if a sequence is an anomaly
+        &#34;&#34;&#34;
+
         if self.verbose:
             print(&#34;Calculating cluster PFSA means and stds...&#34;)
+
         PFSA_llk_means = []
         PFSA_llk_stds = []
         for i in range(len(self.cluster_PFSAs)):
             llks = np.array(Llk(seqfile=self.cluster_files[i], pfsafile=self.cluster_PFSAs[i]).run())
             PFSA_llk_means.append(np.mean(llks))
             PFSA_llk_stds.append(np.std(llks))
-        self.PFSA_llk_means, self.PFSA_llk_stds = PFSA_llk_means, PFSA_llk_stds</code></pre>
+
+        self.PFSA_llk_means, self.PFSA_llk_stds = PFSA_llk_means, PFSA_llk_stds
+
+
+    def __reduce_clusters(self):
+        &#34;&#34;&#34; Attempt to reduce the number of clusters by combining clusters that
+            generate similar PFSAs
+        &#34;&#34;&#34;
+
+        pass
+
+
+class StreamingDetection(AnomalyDetection):
+    &#34;&#34;&#34; Tool for anomaly detection within a single data stream &#34;&#34;&#34;
+    def __init__(self, *, window_size=1000, window_overlap=0, **kwargs):
+        &#34;&#34;&#34;
+        Args:
+            window_size (int): size of sliding window
+            window_overlap (int): overlap of sliding windows
+        &#34;&#34;&#34;
+
+        super().__init__(**kwargs)
+        self.window_size = window_size
+        self.window_overlap = window_overlap
+
+    def fit(self, X, y=None):
+        X_split_streams = self.__split_streams(X)
+        super().fit(X_split_streams)
+
+    def predict(self, X=None):
+        if X is None:
+            return super().predict(X)
+        else:
+            X_split_streams = self.__split_streams(X)
+            return super().predict(X_split_streams)
+
+    def __split_streams(self, X):
+        &#34;&#34;&#34; Split stream data into individual streams of length self.window_size
+            that overlap by self.overlap
+
+            Args:
+                X (pd.DataFrame): data to be split into streams
+        &#34;&#34;&#34;
+
+        if (self.verbose):
+            print(&#34;Splitting data into individual streams...&#34;)
+
+        beg = lambda i: (self.window_size * i) - (self.window_overlap * i)
+        end = lambda i: beg(i) + self.window_size
+        size = X.shape[0] // (self.window_size - self.window_overlap)
+        return pd.concat(
+            [X[beg(i):end(i)].reset_index(drop=True) for i in range(size)],
+            axis=1
+        ).T</code></pre>
 </details>
 </section>
 <section>
@@ -323,16 +430,14 @@ class AnomalyDetection:
 <h2 id="args">Args</h2>
 <dl>
 <dt><strong><code>anomaly_sensitivity</code></strong> :&ensp;<code>float</code>, optional</dt>
-<dd>how many standard deviations above the mean
-llk to consider an anomaly (Default = 1)</dd>
+<dd>how many standard deviations above the mean llk to consider
+an anomaly (Default = 1)</dd>
 <dt><strong><code>cluster_alg</code></strong> :&ensp;<code>sklearn.cluster</code>, optional</dt>
-<dd>clustering algorithm to use
-(Default = KMeans())</dd>
+<dd>clustering algorithm to use (Default = KMeans())</dd>
 <dt><strong><code>quantize</code></strong> :&ensp;<code>bool</code>, optional</dt>
 <dd>whether to quantize the data (Default = True)</dd>
 <dt><strong><code>quantize_type</code></strong> :&ensp;<code>str</code>, optional</dt>
-<dd>type of quantization to use ("complex" or "simple")
-(Default = "complex")</dd>
+<dd>type of quantization to use ("complex" or "simple") (Default = "complex")</dd>
 <dt><strong><code>eps</code></strong> :&ensp;<code>float</code>, optional</dt>
 <dd>epsilon parameter for finding PFSAs (Default = 0.1)</dd>
 <dt><strong><code>verbose</code></strong> :&ensp;<code>bool</code>, optional</dt>
@@ -356,16 +461,13 @@ llk to consider an anomaly (Default = 1)</dd>
     ) -&gt; None:
         &#34;&#34;&#34;
         Args:
-
-            anomaly_sensitivity (float, optional): how many standard deviations above the mean
-                                                   llk to consider an anomaly (Default = 1)\n
-            cluster_alg (sklearn.cluster, optional): clustering algorithm to use
-                                                     (Default = KMeans())\n
-            quantize (bool, optional): whether to quantize the data (Default = True)\n
-            quantize_type (str, optional): type of quantization to use (&#34;complex&#34; or &#34;simple&#34;)
-                                           (Default = &#34;complex&#34;)\n
-            eps (float, optional): epsilon parameter for finding PFSAs (Default = 0.1)\n
-            verbose (bool, optional): whether to print verbose output (Default = False)\n
+            anomaly_sensitivity (float, optional): how many standard deviations above the mean llk to consider
+                an anomaly (Default = 1)
+            cluster_alg (sklearn.cluster, optional): clustering algorithm to use (Default = KMeans())
+            quantize (bool, optional): whether to quantize the data (Default = True)
+            quantize_type (str, optional): type of quantization to use (&#34;complex&#34; or &#34;simple&#34;) (Default = &#34;complex&#34;)
+            eps (float, optional): epsilon parameter for finding PFSAs (Default = 0.1)
+            verbose (bool, optional): whether to print verbose output (Default = False)
 
         &#34;&#34;&#34;
 
@@ -378,10 +480,11 @@ llk to consider an anomaly (Default = 1)</dd>
         self.temp_dir = &#34;zed_temp&#34;
 
         # values calculated in self.fit()
-        self._fitted = False               # whether model has been fit
+        self.fitted = False               # whether model has been fit
         self.quantizer = None              # quantizer used for quantizing data
         self.data_file = &#34;&#34;                # file path of original data
         self.dist_matrix = pd.DataFrame()  # calculated by lsmash, used for clustering
+        self.n_clusters = 0                # number of clusters
         self.clusters = []                 # list of cluster labels
         self.cluster_files = []            # list of file paths to clusters
         self.dot_files = []                # list of file paths to PFSA dot files
@@ -399,22 +502,21 @@ llk to consider an anomaly (Default = 1)</dd>
         &#34;&#34;&#34; Fit an anomaly detection model
 
         Args:
-
             X (pd.DataFrame or str): time series data to be fit
-            y (pd.Series, optional): labels for X only provided for sklearn standard
-                                     (Default = None)
+            y (pd.Series, optional): labels for X only provided for sklearn standard (Default = None)
 
         Returns:
-
             self
         &#34;&#34;&#34;
+
         X_quantized = self.__quantize(X)
         self.__calculate_dist_matrix(X if type(X) is str else X_quantized)
         self.__calculate_cluster_labels()
         self.__write_cluster_files(X_quantized)
         self.__calculate_cluster_PFSAs()
         self.__calculate_PFSA_stats()
-        self._fitted = True
+        self.fitted = True
+
         return self
 
 
@@ -422,16 +524,17 @@ llk to consider an anomaly (Default = 1)</dd>
         &#34;&#34;&#34; Predict whether a time series sequence is anomalous
 
         Args:
-
             X (pd.DataFrame or pd.Series or str, optional): time series data to find anomalies, if None then
-                                                            predicts on original data (Default = None)
+                predicts on original data (Default = None)
             clean (bool, optional): whether to remove temp files (Default = True)
 
         Returns:
-
-            bool or list[bool]: True if time series is an anomaly, False otherwise
-                                output shape depends on input
+            bool or list[bool]: True if time series is an anomaly, False otherwise output shape depends on input
         &#34;&#34;&#34;
+
+        if not self.fitted:
+            raise ValueError(&#34;Model has not been fit yet&#34;)
+
         seqfile = &#34;&#34;
         num_predictions = 0
         # commonly want to find anomalies in original data
@@ -463,20 +566,21 @@ llk to consider an anomaly (Default = 1)</dd>
             else:
                 num_predictions = X_quantized.shape[0]
 
-        cluster_llk_vec = np.empty([len(self.cluster_PFSAs), num_predictions], dtype=np.float64)
-        anomaly_vec = np.zeros(num_predictions, dtype=np.int8)
-        for i in range(len(self.cluster_PFSAs)):
+        cluster_llk_vec = np.empty([self.n_clusters, num_predictions], dtype=np.float64)
+        anomaly_vec = np.zeros(num_predictions, dtype=np.int64)
+        for i in range(self.n_clusters):
             curr_llks = Llk(seqfile=seqfile, pfsafile=self.cluster_PFSAs[i]).run()
             cluster_llk_vec[i] = curr_llks
             # classify llk as anomaly if greater than X standard deviations above the mean
             upper_bound = self.PFSA_llk_means[i] + (self.PFSA_llk_stds[i] * self.anomaly_sensitivity)
             for j, llk in enumerate(curr_llks):
                 anomaly_vec[j] += 1 if llk &gt; upper_bound else 0
+
         self.curr_cluster_llk_vec = cluster_llk_vec
         self.closest_match = np.argmin(cluster_llk_vec, axis=0)
 
         # consider to be anomaly if all llks above specified upper bound
-        predictions = [x == len(self.cluster_PFSAs) for x in anomaly_vec]
+        predictions = [x == self.n_clusters for x in anomaly_vec]
 
         if len(predictions) == 1:
             predictions = predictions[0]
@@ -487,10 +591,28 @@ llk to consider an anomaly (Default = 1)</dd>
         return predictions
 
 
+    def save_model(self, path):
+        &#34;&#34;&#34; Save model to file
+
+        Args:
+            path (str): path to save model to
+        &#34;&#34;&#34;
+
+        if not self.fitted:
+            raise ValueError(&#34;Model has not been fit yet&#34;)
+
+        # with open(path, &#34;wb&#34;) as f:
+        #     pickle.dump(self, f)
+
+
     def print_PFSAs(self):
         &#34;&#34;&#34; Print PFSAs found for each cluster &#34;&#34;&#34;
+
+        if not self.fitted:
+            raise ValueError(&#34;Model has not been fit yet&#34;)
+
         properties = [&#34;%ANN_ERR&#34;, &#34;%MRG_EPS&#34;, &#34;%SYN_STR&#34;, &#34;%SYM_FRQ&#34;, &#34;%PITILDE&#34;, &#34;%CONNX&#34;]
-        for i in range(len(self.cluster_PFSAs_info)):
+        for i in range(self.n_clusters):
             print(f&#34;Cluster {i} PFSA:&#34;)
             for prop in properties:
                 print(f&#34;{prop}: {self.cluster_PFSAs_info[i][prop]}&#34;)
@@ -499,24 +621,32 @@ llk to consider an anomaly (Default = 1)</dd>
 
 
     def __quantize(self, X):
-        &#34;&#34;&#34; Quantize the data into finite alphabet &#34;&#34;&#34;
+        &#34;&#34;&#34; Quantize the data into finite alphabet
+
+            Args:
+                X (pd.DataFrame or str): time series data to be quantized
+        &#34;&#34;&#34;
+
         if not self.quantize or self.quantize_type is None:
             if type(X) is str:
                 return pd.read_csv(X, sep=&#34; &#34;, header=None, low_memory=False).dropna(how=&#34;all&#34;, axis=1)
             else:
                 return X.copy()
+
         if self.verbose:
             print(&#34;Quantizing...&#34;)
+
         # Quantizer() expects a DataFrame
         if type(X) is pd.Series:
             X = X.copy().to_frame().reset_index(drop=True).T
+
         if self.quantize_type == &#34;simple&#34;:
             # basic differentiation
             X = X.astype(float).diff(axis=1).fillna(0)
             return X.apply(lambda row : row.apply(lambda n : 1 if n &gt; 0 else 0), axis=1)
         elif self.quantize_type == &#34;complex&#34;:
             # use cythonized quantizer binary
-            if not self._fitted:
+            if not self.fitted:
                 self.quantizer = Quantizer(n_quantizations=1, epsilon=-1)
                 self.quantizer.fit(X)
             return pd.concat([quantized for quantized in self.quantizer.transform(X)], axis=1)
@@ -525,9 +655,15 @@ llk to consider an anomaly (Default = 1)</dd>
 
 
     def __calculate_dist_matrix(self, X):
-        &#34;&#34;&#34; Calculate distance matrix using lsmash &#34;&#34;&#34;
+        &#34;&#34;&#34; Calculate distance matrix using lsmash
+
+            Args:
+                X (pd.DataFrame or str): time series data to calculate distance matrix from
+        &#34;&#34;&#34;
+
         if self.verbose:
             print(&#34;Calculating distance matrix...&#34;)
+
         # don&#39;t create file if it already exists i.e. X is a file path
         if type(X) is str and not self.quantize:
             self.data_file = X
@@ -540,36 +676,55 @@ llk to consider an anomaly (Default = 1)</dd>
 
     def __calculate_cluster_labels(self):
         &#34;&#34;&#34; Cluster distance matrix &#34;&#34;&#34;
+
         if self.verbose:
             print(&#34;Clustering distance matrix...&#34;)
-        self.clusters = self.clustering_alg.fit(self.dist_matrix).labels_
+
+        clusters = self.clustering_alg.fit(self.dist_matrix).labels_
+        n_clusters = len(set(clusters)) - (1 if -1 in clusters else 0)
+
+        # reassign clusters such that cluster 0 is the most common label, 1 is the second most common, etc.
+        cluster_counts = np.zeros(n_clusters, dtype=np.int64)
+        for cluster in clusters:
+            cluster_counts[cluster] += 1
+        cluster_rank = np.full(n_clusters, n_clusters - 1, dtype=np.int64) - np.argsort(np.argsort(cluster_counts))
+        clusters = [cluster_rank[cluster] for cluster in clusters]
+
+        self.n_clusters = n_clusters
+        self.clusters = clusters
 
 
     def __write_cluster_files(self, X):
-        &#34;&#34;&#34; Write cluster time series data to files &#34;&#34;&#34;
-        n_clusters = len(set(self.clusters)) - (1 if -1 in self.clusters else 0)
+        &#34;&#34;&#34; Write cluster time series data to files
+
+            Args:
+                X (pd.DataFrame or str): time series data to write to files according to cluster
+        &#34;&#34;&#34;
+
         X[&#34;cluster&#34;] = self.clusters
         cluster_files = []
-        if (n_clusters == 1):
+        if (self.n_clusters == 1):
             cluster_files.append(self.data_file)
         else:
-            for i in range(n_clusters):
+            for i in range(self.n_clusters):
                 if self.verbose:
-                    print(f&#34;Writing cluster {i + 1}/{n_clusters} to file...&#34;)
+                    print(f&#34;Writing cluster {i + 1}/{self.n_clusters} to file...&#34;)
                 cluster_files.append(RANDOM_NAME(path=self.temp_dir))
                 X[X[&#34;cluster&#34;] == i] \
                     .drop(&#34;cluster&#34;, axis=1) \
                     .to_csv(cluster_files[i], sep=&#34; &#34;, header=False, index=False, float_format=&#34;%g&#34;)
+
         self.cluster_files = cluster_files
 
 
     def __calculate_cluster_PFSAs(self):
         &#34;&#34;&#34; Infer PFSAs from clusters using genESeSS &#34;&#34;&#34;
+
         cluster_PFSAs = []
         dot_files = []
         for i, cluster_file in enumerate(self.cluster_files):
             if self.verbose:
-                print(f&#34;Generating cluster PFSA {i + 1}/{len(self.cluster_files)}...&#34;)
+                print(f&#34;Generating cluster PFSA {i + 1}/{self.n_clusters}...&#34;)
             PFSA_file = RANDOM_NAME(path=self.temp_dir)
             cluster_PFSAs.append(PFSA_file)
             dot_file = RANDOM_NAME(path=self.temp_dir)
@@ -599,17 +754,33 @@ llk to consider an anomaly (Default = 1)</dd>
 
     def __calculate_PFSA_stats(self):
         &#34;&#34;&#34; Calculate the means and standard deviations of llks for each PFSA
-            to later determine if a sequence is an anomaly &#34;&#34;&#34;
+            to later determine if a sequence is an anomaly
+        &#34;&#34;&#34;
+
         if self.verbose:
             print(&#34;Calculating cluster PFSA means and stds...&#34;)
+
         PFSA_llk_means = []
         PFSA_llk_stds = []
         for i in range(len(self.cluster_PFSAs)):
             llks = np.array(Llk(seqfile=self.cluster_files[i], pfsafile=self.cluster_PFSAs[i]).run())
             PFSA_llk_means.append(np.mean(llks))
             PFSA_llk_stds.append(np.std(llks))
-        self.PFSA_llk_means, self.PFSA_llk_stds = PFSA_llk_means, PFSA_llk_stds</code></pre>
+
+        self.PFSA_llk_means, self.PFSA_llk_stds = PFSA_llk_means, PFSA_llk_stds
+
+
+    def __reduce_clusters(self):
+        &#34;&#34;&#34; Attempt to reduce the number of clusters by combining clusters that
+            generate similar PFSAs
+        &#34;&#34;&#34;
+
+        pass</code></pre>
 </details>
+<h3>Subclasses</h3>
+<ul class="hlist">
+<li><a title="patternly.detection.StreamingDetection" href="#patternly.detection.StreamingDetection">StreamingDetection</a></li>
+</ul>
 <h3>Methods</h3>
 <dl>
 <dt id="patternly.detection.AnomalyDetection.fit"><code class="name flex">
@@ -622,8 +793,7 @@ llk to consider an anomaly (Default = 1)</dd>
 <dt><strong><code>X</code></strong> :&ensp;<code>pd.DataFrame</code> or <code>str</code></dt>
 <dd>time series data to be fit</dd>
 <dt><strong><code>y</code></strong> :&ensp;<code>pd.Series</code>, optional</dt>
-<dd>labels for X only provided for sklearn standard
-(Default = None)</dd>
+<dd>labels for X only provided for sklearn standard (Default = None)</dd>
 </dl>
 <h2 id="returns">Returns</h2>
 <p>self</p></div>
@@ -635,22 +805,21 @@ llk to consider an anomaly (Default = 1)</dd>
     &#34;&#34;&#34; Fit an anomaly detection model
 
     Args:
-
         X (pd.DataFrame or str): time series data to be fit
-        y (pd.Series, optional): labels for X only provided for sklearn standard
-                                 (Default = None)
+        y (pd.Series, optional): labels for X only provided for sklearn standard (Default = None)
 
     Returns:
-
         self
     &#34;&#34;&#34;
+
     X_quantized = self.__quantize(X)
     self.__calculate_dist_matrix(X if type(X) is str else X_quantized)
     self.__calculate_cluster_labels()
     self.__write_cluster_files(X_quantized)
     self.__calculate_cluster_PFSAs()
     self.__calculate_PFSA_stats()
-    self._fitted = True
+    self.fitted = True
+
     return self</code></pre>
 </details>
 </dd>
@@ -670,8 +839,7 @@ predicts on original data (Default = None)</dd>
 <h2 id="returns">Returns</h2>
 <dl>
 <dt><code>bool</code> or <code>list[bool]</code></dt>
-<dd>True if time series is an anomaly, False otherwise
-output shape depends on input</dd>
+<dd>True if time series is an anomaly, False otherwise output shape depends on input</dd>
 </dl></div>
 <details class="source">
 <summary>
@@ -681,16 +849,17 @@ output shape depends on input</dd>
     &#34;&#34;&#34; Predict whether a time series sequence is anomalous
 
     Args:
-
         X (pd.DataFrame or pd.Series or str, optional): time series data to find anomalies, if None then
-                                                        predicts on original data (Default = None)
+            predicts on original data (Default = None)
         clean (bool, optional): whether to remove temp files (Default = True)
 
     Returns:
-
-        bool or list[bool]: True if time series is an anomaly, False otherwise
-                            output shape depends on input
+        bool or list[bool]: True if time series is an anomaly, False otherwise output shape depends on input
     &#34;&#34;&#34;
+
+    if not self.fitted:
+        raise ValueError(&#34;Model has not been fit yet&#34;)
+
     seqfile = &#34;&#34;
     num_predictions = 0
     # commonly want to find anomalies in original data
@@ -722,20 +891,21 @@ output shape depends on input</dd>
         else:
             num_predictions = X_quantized.shape[0]
 
-    cluster_llk_vec = np.empty([len(self.cluster_PFSAs), num_predictions], dtype=np.float64)
-    anomaly_vec = np.zeros(num_predictions, dtype=np.int8)
-    for i in range(len(self.cluster_PFSAs)):
+    cluster_llk_vec = np.empty([self.n_clusters, num_predictions], dtype=np.float64)
+    anomaly_vec = np.zeros(num_predictions, dtype=np.int64)
+    for i in range(self.n_clusters):
         curr_llks = Llk(seqfile=seqfile, pfsafile=self.cluster_PFSAs[i]).run()
         cluster_llk_vec[i] = curr_llks
         # classify llk as anomaly if greater than X standard deviations above the mean
         upper_bound = self.PFSA_llk_means[i] + (self.PFSA_llk_stds[i] * self.anomaly_sensitivity)
         for j, llk in enumerate(curr_llks):
             anomaly_vec[j] += 1 if llk &gt; upper_bound else 0
+
     self.curr_cluster_llk_vec = cluster_llk_vec
     self.closest_match = np.argmin(cluster_llk_vec, axis=0)
 
     # consider to be anomaly if all llks above specified upper bound
-    predictions = [x == len(self.cluster_PFSAs) for x in anomaly_vec]
+    predictions = [x == self.n_clusters for x in anomaly_vec]
 
     if len(predictions) == 1:
         predictions = predictions[0]
@@ -757,8 +927,12 @@ output shape depends on input</dd>
 </summary>
 <pre><code class="python">def print_PFSAs(self):
     &#34;&#34;&#34; Print PFSAs found for each cluster &#34;&#34;&#34;
+
+    if not self.fitted:
+        raise ValueError(&#34;Model has not been fit yet&#34;)
+
     properties = [&#34;%ANN_ERR&#34;, &#34;%MRG_EPS&#34;, &#34;%SYN_STR&#34;, &#34;%SYM_FRQ&#34;, &#34;%PITILDE&#34;, &#34;%CONNX&#34;]
-    for i in range(len(self.cluster_PFSAs_info)):
+    for i in range(self.n_clusters):
         print(f&#34;Cluster {i} PFSA:&#34;)
         for prop in properties:
             print(f&#34;{prop}: {self.cluster_PFSAs_info[i][prop]}&#34;)
@@ -766,7 +940,111 @@ output shape depends on input</dd>
             print(&#34;\n&#34;)</code></pre>
 </details>
 </dd>
+<dt id="patternly.detection.AnomalyDetection.save_model"><code class="name flex">
+<span>def <span class="ident">save_model</span></span>(<span>self, path)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Save model to file</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>path</code></strong> :&ensp;<code>str</code></dt>
+<dd>path to save model to</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def save_model(self, path):
+    &#34;&#34;&#34; Save model to file
+
+    Args:
+        path (str): path to save model to
+    &#34;&#34;&#34;
+
+    if not self.fitted:
+        raise ValueError(&#34;Model has not been fit yet&#34;)
+
+    # with open(path, &#34;wb&#34;) as f:
+    #     pickle.dump(self, f)</code></pre>
+</details>
+</dd>
 </dl>
+</dd>
+<dt id="patternly.detection.StreamingDetection"><code class="flex name class">
+<span>class <span class="ident">StreamingDetection</span></span>
+<span>(</span><span>*, window_size=1000, window_overlap=0, **kwargs)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Tool for anomaly detection within a single data stream </p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>window_size</code></strong> :&ensp;<code>int</code></dt>
+<dd>size of sliding window</dd>
+<dt><strong><code>window_overlap</code></strong> :&ensp;<code>int</code></dt>
+<dd>overlap of sliding windows</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class StreamingDetection(AnomalyDetection):
+    &#34;&#34;&#34; Tool for anomaly detection within a single data stream &#34;&#34;&#34;
+    def __init__(self, *, window_size=1000, window_overlap=0, **kwargs):
+        &#34;&#34;&#34;
+        Args:
+            window_size (int): size of sliding window
+            window_overlap (int): overlap of sliding windows
+        &#34;&#34;&#34;
+
+        super().__init__(**kwargs)
+        self.window_size = window_size
+        self.window_overlap = window_overlap
+
+    def fit(self, X, y=None):
+        X_split_streams = self.__split_streams(X)
+        super().fit(X_split_streams)
+
+    def predict(self, X=None):
+        if X is None:
+            return super().predict(X)
+        else:
+            X_split_streams = self.__split_streams(X)
+            return super().predict(X_split_streams)
+
+    def __split_streams(self, X):
+        &#34;&#34;&#34; Split stream data into individual streams of length self.window_size
+            that overlap by self.overlap
+
+            Args:
+                X (pd.DataFrame): data to be split into streams
+        &#34;&#34;&#34;
+
+        if (self.verbose):
+            print(&#34;Splitting data into individual streams...&#34;)
+
+        beg = lambda i: (self.window_size * i) - (self.window_overlap * i)
+        end = lambda i: beg(i) + self.window_size
+        size = X.shape[0] // (self.window_size - self.window_overlap)
+        return pd.concat(
+            [X[beg(i):end(i)].reset_index(drop=True) for i in range(size)],
+            axis=1
+        ).T</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="patternly.detection.AnomalyDetection" href="#patternly.detection.AnomalyDetection">AnomalyDetection</a></li>
+</ul>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="patternly.detection.AnomalyDetection" href="#patternly.detection.AnomalyDetection">AnomalyDetection</a></b></code>:
+<ul class="hlist">
+<li><code><a title="patternly.detection.AnomalyDetection.fit" href="#patternly.detection.AnomalyDetection.fit">fit</a></code></li>
+<li><code><a title="patternly.detection.AnomalyDetection.predict" href="#patternly.detection.AnomalyDetection.predict">predict</a></code></li>
+<li><code><a title="patternly.detection.AnomalyDetection.print_PFSAs" href="#patternly.detection.AnomalyDetection.print_PFSAs">print_PFSAs</a></code></li>
+<li><code><a title="patternly.detection.AnomalyDetection.save_model" href="#patternly.detection.AnomalyDetection.save_model">save_model</a></code></li>
+</ul>
+</li>
+</ul>
 </dd>
 </dl>
 </section>
@@ -791,7 +1069,11 @@ output shape depends on input</dd>
 <li><code><a title="patternly.detection.AnomalyDetection.fit" href="#patternly.detection.AnomalyDetection.fit">fit</a></code></li>
 <li><code><a title="patternly.detection.AnomalyDetection.predict" href="#patternly.detection.AnomalyDetection.predict">predict</a></code></li>
 <li><code><a title="patternly.detection.AnomalyDetection.print_PFSAs" href="#patternly.detection.AnomalyDetection.print_PFSAs">print_PFSAs</a></code></li>
+<li><code><a title="patternly.detection.AnomalyDetection.save_model" href="#patternly.detection.AnomalyDetection.save_model">save_model</a></code></li>
 </ul>
+</li>
+<li>
+<h4><code><a title="patternly.detection.StreamingDetection" href="#patternly.detection.StreamingDetection">StreamingDetection</a></code></h4>
 </li>
 </ul>
 </li>
@@ -800,7 +1082,7 @@ output shape depends on input</dd>
 </main>
 <footer id="footer">
 Author: Drew Vlasnik and Ishanu Chattopadhyay <a href="https://zed.uchicago.edu"> Zero Knowledge Discovery, University of Chicago</a>. Email: ishanu@uchicago.edu
-<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.9.2</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.10.0</a>.</p>
 </footer>
 </body>
 </html>
