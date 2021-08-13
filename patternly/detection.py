@@ -68,7 +68,7 @@ class AnomalyDetection:
             y (pd.Series, optional): labels for X only provided for sklearn standard (Default = None)
 
         Returns:
-            self
+            AnomalyDetection: fitted model
         """
 
         X_quantized = self.__quantize(X)
@@ -157,13 +157,13 @@ class AnomalyDetection:
         """ Save model to file
 
         Args:
-            path (str): path to save model to
+            path (str): file path to save model to
         """
 
         if not self.fitted:
             raise ValueError("Model has not been fit yet")
 
-        pfsa_objs = {}
+        PFSAs = {}
         for i, cluster_file in enumerate(self.cluster_PFSAs):
             with open(cluster_file, "r") as f:
                 # parse PFSA file
@@ -179,7 +179,7 @@ class AnomalyDetection:
                 next(f) # skip #CONNX line
                 connx = [[int(val) for val in next(f).strip().split(" ")] for _ in range(size)]
 
-                pfsa_objs[i] = {
+                PFSAs[i] = {
                     "%ANN_ERR": ann_err,
                     "%MRG_EPS": mrg_eps,
                     "%SYN_STR": syn_str,
@@ -190,7 +190,7 @@ class AnomalyDetection:
 
         model = {
             "self": self,
-            "PFSAs": pfsa_objs,
+            "PFSAs": PFSAs,
         }
 
         with open(path, "wb") as f:
@@ -203,34 +203,37 @@ class AnomalyDetection:
 
             Args:
                 path (str): path to saved model
+
+            Returns:
+                AnomalyDetection: loaded model
         """
 
         with open(path, "rb") as f:
             model = pickle.load(f)
 
         self = model["self"]
-        pfsa_objs = model["PFSAs"]
+        PFSAs = model["PFSAs"]
 
         # write PFSA files
         for i in range(self.n_clusters):
             self.cluster_PFSAs[i] = RANDOM_NAME(path=self.temp_dir)
             with open(self.cluster_PFSAs[i], "w") as f:
-                f.write(f"%ANN_ERR: {pfsa_objs[i]['%ANN_ERR']}\n")
-                f.write(f"%MRG_EPS: {pfsa_objs[i]['%MRG_EPS']}\n")
-                f.write(f"%SYN_STR: {pfsa_objs[i]['%SYN_STR']}\n")
+                f.write(f"%ANN_ERR: {PFSAs[i]['%ANN_ERR']}\n")
+                f.write(f"%MRG_EPS: {PFSAs[i]['%MRG_EPS']}\n")
+                f.write(f"%SYN_STR: {PFSAs[i]['%SYN_STR']}\n")
                 f.write(f"%SYM_FRQ: ")
-                for sym_frq in pfsa_objs[i]["%SYM_FRQ"]:
-                    suffix = " " if str(sym_frq) != str(pfsa_objs[i]["%SYM_FRQ"][-1]) else " \n"
+                for sym_frq in PFSAs[i]["%SYM_FRQ"]:
+                    suffix = " " if str(sym_frq) != str(PFSAs[i]["%SYM_FRQ"][-1]) else " \n"
                     f.write(f"{sym_frq}{suffix}")
-                f.write(f"%PITILDE: size({len(pfsa_objs[i]['%PITILDE'])})\n")
+                f.write(f"%PITILDE: size({len(PFSAs[i]['%PITILDE'])})\n")
                 f.write(f"#PITILDE\n")
-                for pitilde in pfsa_objs[i]["%PITILDE"]:
+                for pitilde in PFSAs[i]["%PITILDE"]:
                     for val in pitilde:
                         suffix = " " if str(val) != str(pitilde[-1]) else " \n"
                         f.write(f"{val}{suffix}")
-                f.write(f"%CONNX: size({len(pfsa_objs[i]['%CONNX'])})\n")
+                f.write(f"%CONNX: size({len(PFSAs[i]['%CONNX'])})\n")
                 f.write(f"#CONNX\n")
-                for connx in pfsa_objs[i]["%CONNX"]:
+                for connx in PFSAs[i]["%CONNX"]:
                     for val in connx:
                         suffix = " " if str(val) != str(connx[-1]) else " \n"
                         f.write(f"{val}{suffix}")

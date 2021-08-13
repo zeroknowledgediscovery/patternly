@@ -1,7 +1,8 @@
-*.dat
 .ipynb_checkpoints/
-test.py
 __pycache__/
-*.egg-info/
 build/
 zed_temp/
+*.egg-info/
+*.dat
+test.py
+*.pickle
