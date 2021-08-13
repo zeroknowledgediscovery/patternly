@@ -1,12 +1,12 @@
 Metadata-Version: 2.1
 Name: patternly
-Version: 0.0.20
+Version: 0.0.22
 Summary: A tool for detecting anomalies in time series data
 Home-page: https://github.com/zeroknowledgediscovery/mantis
 Author: @zedlab_
 Author-email: ishanu@uchicago.edu
 License: LICENSE
-Download-URL: https://github.com/zeroknowledgediscovery/mantis/archive/0.0.20.tar.gz
+Download-URL: https://github.com/zeroknowledgediscovery/mantis/archive/0.0.22.tar.gz
 Description: ===============
         patternly
         ===============
@@ -42,7 +42,7 @@ Description: ===============
         
         .. code-block::
         
-            from patternly.detection import AnomalyDetection
+            from patternly.detection import AnomalyDetection, StreamingDetection
         
         
 Keywords: anomaly detection,timeseries,model-free,adaptive

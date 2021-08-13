@@ -5,6 +5,7 @@ version.py
 patternly/__init__.py
 patternly/_utils.py
 patternly/detection.py
+patternly/test.py
 patternly.egg-info/PKG-INFO
 patternly.egg-info/SOURCES.txt
 patternly.egg-info/dependency_links.txt
