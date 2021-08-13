@@ -40,11 +40,13 @@ from patternly._utils import RANDOM_NAME, os_remove
 
 class AnomalyDetection:
     &#34;&#34;&#34; Tool for anomaly detection &#34;&#34;&#34;
+
     def __init__(
         self,
         *,
         anomaly_sensitivity=1,
-        clustering_alg=KMeans(),
+        n_clusters=1,
+        clustering_alg=None,
         quantize=True,
         quantize_type=&#34;complex&#34;,
         eps=0.1,
@@ -54,7 +56,8 @@ class AnomalyDetection:
         Args:
             anomaly_sensitivity (float, optional): how many standard deviations above the mean llk to consider
                 an anomaly (Default = 1)
-            cluster_alg (sklearn.cluster, optional): clustering algorithm to use (Default = KMeans())
+            n_clusters (int, optional): number of clusters to use with KMeans (Default = 1)
+            cluster_alg (sklearn.cluster, optional): clustering algorithm to use, if None then KMeans (Default = None)
             quantize (bool, optional): whether to quantize the data (Default = True)
             quantize_type (str, optional): type of quantization to use (&#34;complex&#34; or &#34;simple&#34;) (Default = &#34;complex&#34;)
             eps (float, optional): epsilon parameter for finding PFSAs (Default = 0.1)
@@ -63,6 +66,7 @@ class AnomalyDetection:
         &#34;&#34;&#34;
 
         self.anomaly_sensitivity = anomaly_sensitivity
+        self.n_clusters = n_clusters
         self.clustering_alg = clustering_alg
         self.quantize = quantize
         self.quantize_type = quantize_type
@@ -76,7 +80,7 @@ class AnomalyDetection:
         self.data_file = &#34;&#34;                # file path of original data
         self.dist_matrix = pd.DataFrame()  # calculated by lsmash, used for clustering
         self.n_clusters = 0                # number of clusters
-        self.clusters = []                 # list of cluster labels
+        self.cluster_labels = []           # list of cluster labels
         self.cluster_files = []            # list of file paths to clusters
         self.dot_files = []                # list of file paths to PFSA dot files
         self.cluster_PFSAs = []            # list of file paths to cluster PFSAs
@@ -131,7 +135,7 @@ class AnomalyDetection:
         # commonly want to find anomalies in original data
         if X is None and os.path.isfile(self.data_file):
             seqfile = self.data_file
-            num_predictions = len(self.clusters)
+            num_predictions = len(self.cluster_labels)
         else:
             # if type(X) is str and not self.quantize:
             #     seqfile = X
@@ -346,18 +350,22 @@ class AnomalyDetection:
         if self.verbose:
             print(&#34;Clustering distance matrix...&#34;)
 
-        clusters = self.clustering_alg.fit(self.dist_matrix).labels_
-        n_clusters = len(set(clusters)) - (1 if -1 in clusters else 0)
+        cluster_labels = []
+        if self.cluster_alg is None:
+            cluster_labels = KMeans(n_clusters=self.n_clusters).fit(self.dist_matrix).labels_
+        else:
+            cluster_labels = self.clustering_alg.fit(self.dist_matrix).labels_
+        n_clusters = len(set(cluster_labels)) - (1 if -1 in cluster_labels else 0)
 
         # reassign clusters such that cluster 0 is the most common label, 1 is the second most common, etc.
         cluster_counts = np.zeros(n_clusters, dtype=np.int64)
-        for cluster in clusters:
+        for cluster in cluster_labels:
             cluster_counts[cluster] += 1
         cluster_rank = np.full(n_clusters, n_clusters - 1, dtype=np.int64) - np.argsort(np.argsort(cluster_counts))
-        clusters = [cluster_rank[cluster] for cluster in clusters]
+        cluster_labels = [cluster_rank[cluster] for cluster in cluster_labels]
 
         self.n_clusters = n_clusters
-        self.clusters = clusters
+        self.cluster_labels = cluster_labels
 
 
     def __write_cluster_files(self, X):
@@ -367,7 +375,7 @@ class AnomalyDetection:
                 X (pd.DataFrame or str): time series data to write to files according to cluster
         &#34;&#34;&#34;
 
-        X[&#34;cluster&#34;] = self.clusters
+        X[&#34;cluster&#34;] = self.cluster_labels
         cluster_files = []
         if (self.n_clusters == 1):
             cluster_files.append(self.data_file)
@@ -446,6 +454,7 @@ class AnomalyDetection:
 
 class StreamingDetection(AnomalyDetection):
     &#34;&#34;&#34; Tool for anomaly detection within a single data stream &#34;&#34;&#34;
+
     def __init__(self, *, window_size=1000, window_overlap=0, **kwargs):
         &#34;&#34;&#34;
         Args:
@@ -499,7 +508,7 @@ class StreamingDetection(AnomalyDetection):
 <dl>
 <dt id="patternly.detection.AnomalyDetection"><code class="flex name class">
 <span>class <span class="ident">AnomalyDetection</span></span>
-<span>(</span><span>*, anomaly_sensitivity=1, clustering_alg=KMeans(), quantize=True, quantize_type='complex', eps=0.1, verbose=False)</span>
+<span>(</span><span>*, anomaly_sensitivity=1, n_clusters=1, clustering_alg=None, quantize=True, quantize_type='complex', eps=0.1, verbose=False)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Tool for anomaly detection </p>
@@ -508,8 +517,10 @@ class StreamingDetection(AnomalyDetection):
 <dt><strong><code>anomaly_sensitivity</code></strong> :&ensp;<code>float</code>, optional</dt>
 <dd>how many standard deviations above the mean llk to consider
 an anomaly (Default = 1)</dd>
+<dt><strong><code>n_clusters</code></strong> :&ensp;<code>int</code>, optional</dt>
+<dd>number of clusters to use with KMeans (Default = 1)</dd>
 <dt><strong><code>cluster_alg</code></strong> :&ensp;<code>sklearn.cluster</code>, optional</dt>
-<dd>clustering algorithm to use (Default = KMeans())</dd>
+<dd>clustering algorithm to use, if None then KMeans (Default = None)</dd>
 <dt><strong><code>quantize</code></strong> :&ensp;<code>bool</code>, optional</dt>
 <dd>whether to quantize the data (Default = True)</dd>
 <dt><strong><code>quantize_type</code></strong> :&ensp;<code>str</code>, optional</dt>
@@ -525,11 +536,13 @@ an anomaly (Default = 1)</dd>
 </summary>
 <pre><code class="python">class AnomalyDetection:
     &#34;&#34;&#34; Tool for anomaly detection &#34;&#34;&#34;
+
     def __init__(
         self,
         *,
         anomaly_sensitivity=1,
-        clustering_alg=KMeans(),
+        n_clusters=1,
+        clustering_alg=None,
         quantize=True,
         quantize_type=&#34;complex&#34;,
         eps=0.1,
@@ -539,7 +552,8 @@ an anomaly (Default = 1)</dd>
         Args:
             anomaly_sensitivity (float, optional): how many standard deviations above the mean llk to consider
                 an anomaly (Default = 1)
-            cluster_alg (sklearn.cluster, optional): clustering algorithm to use (Default = KMeans())
+            n_clusters (int, optional): number of clusters to use with KMeans (Default = 1)
+            cluster_alg (sklearn.cluster, optional): clustering algorithm to use, if None then KMeans (Default = None)
             quantize (bool, optional): whether to quantize the data (Default = True)
             quantize_type (str, optional): type of quantization to use (&#34;complex&#34; or &#34;simple&#34;) (Default = &#34;complex&#34;)
             eps (float, optional): epsilon parameter for finding PFSAs (Default = 0.1)
@@ -548,6 +562,7 @@ an anomaly (Default = 1)</dd>
         &#34;&#34;&#34;
 
         self.anomaly_sensitivity = anomaly_sensitivity
+        self.n_clusters = n_clusters
         self.clustering_alg = clustering_alg
         self.quantize = quantize
         self.quantize_type = quantize_type
@@ -561,7 +576,7 @@ an anomaly (Default = 1)</dd>
         self.data_file = &#34;&#34;                # file path of original data
         self.dist_matrix = pd.DataFrame()  # calculated by lsmash, used for clustering
         self.n_clusters = 0                # number of clusters
-        self.clusters = []                 # list of cluster labels
+        self.cluster_labels = []           # list of cluster labels
         self.cluster_files = []            # list of file paths to clusters
         self.dot_files = []                # list of file paths to PFSA dot files
         self.cluster_PFSAs = []            # list of file paths to cluster PFSAs
@@ -616,7 +631,7 @@ an anomaly (Default = 1)</dd>
         # commonly want to find anomalies in original data
         if X is None and os.path.isfile(self.data_file):
             seqfile = self.data_file
-            num_predictions = len(self.clusters)
+            num_predictions = len(self.cluster_labels)
         else:
             # if type(X) is str and not self.quantize:
             #     seqfile = X
@@ -831,18 +846,22 @@ an anomaly (Default = 1)</dd>
         if self.verbose:
             print(&#34;Clustering distance matrix...&#34;)
 
-        clusters = self.clustering_alg.fit(self.dist_matrix).labels_
-        n_clusters = len(set(clusters)) - (1 if -1 in clusters else 0)
+        cluster_labels = []
+        if self.cluster_alg is None:
+            cluster_labels = KMeans(n_clusters=self.n_clusters).fit(self.dist_matrix).labels_
+        else:
+            cluster_labels = self.clustering_alg.fit(self.dist_matrix).labels_
+        n_clusters = len(set(cluster_labels)) - (1 if -1 in cluster_labels else 0)
 
         # reassign clusters such that cluster 0 is the most common label, 1 is the second most common, etc.
         cluster_counts = np.zeros(n_clusters, dtype=np.int64)
-        for cluster in clusters:
+        for cluster in cluster_labels:
             cluster_counts[cluster] += 1
         cluster_rank = np.full(n_clusters, n_clusters - 1, dtype=np.int64) - np.argsort(np.argsort(cluster_counts))
-        clusters = [cluster_rank[cluster] for cluster in clusters]
+        cluster_labels = [cluster_rank[cluster] for cluster in cluster_labels]
 
         self.n_clusters = n_clusters
-        self.clusters = clusters
+        self.cluster_labels = cluster_labels
 
 
     def __write_cluster_files(self, X):
@@ -852,7 +871,7 @@ an anomaly (Default = 1)</dd>
                 X (pd.DataFrame or str): time series data to write to files according to cluster
         &#34;&#34;&#34;
 
-        X[&#34;cluster&#34;] = self.clusters
+        X[&#34;cluster&#34;] = self.cluster_labels
         cluster_files = []
         if (self.n_clusters == 1):
             cluster_files.append(self.data_file)
@@ -1086,7 +1105,7 @@ predicts on original data (Default = None)</dd>
     # commonly want to find anomalies in original data
     if X is None and os.path.isfile(self.data_file):
         seqfile = self.data_file
-        num_predictions = len(self.clusters)
+        num_predictions = len(self.cluster_labels)
     else:
         # if type(X) is str and not self.quantize:
         #     seqfile = X
@@ -1240,6 +1259,7 @@ predicts on original data (Default = None)</dd>
 </summary>
 <pre><code class="python">class StreamingDetection(AnomalyDetection):
     &#34;&#34;&#34; Tool for anomaly detection within a single data stream &#34;&#34;&#34;
+
     def __init__(self, *, window_size=1000, window_overlap=0, **kwargs):
         &#34;&#34;&#34;
         Args:

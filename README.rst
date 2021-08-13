@@ -33,5 +33,5 @@ See `examples`_.
 
 .. code-block::
 
-    from patternly.detection import AnomalyDetection
+    from patternly.detection import AnomalyDetection, StreamingDetection
 
