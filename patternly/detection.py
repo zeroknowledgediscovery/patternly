@@ -3,7 +3,7 @@ import pickle
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
-from zedsuite.zutil import Llk, Lsmash
+from zedsuite.zutil import Llk, Lsmash, Prun
 from zedsuite.genesess import GenESeSS
 from zedsuite.quantizer import Quantizer
 from patternly._utils import RANDOM_NAME, os_remove
@@ -53,8 +53,8 @@ class AnomalyDetection:
         self.cluster_labels = []           # list of cluster labels
         self.cluster_files = []            # list of file paths to clusters
         self.dot_files = []                # list of file paths to PFSA dot files
-        self.cluster_PFSAs = []            # list of file paths to cluster PFSAs
-        self.cluster_PFSAs_info = []       # list of dicts of cluster PFSAs info for printing
+        self.cluster_PFSA_files = []       # list of file paths to cluster PFSAs
+        self.cluster_PFSA_info = []        # list of dicts of cluster PFSAs info for printing
         self.PFSA_llk_means = []           # list of mean llk for each cluster
         self.PFSA_llk_stds = []            # list of std of llk for each cluster
 
@@ -80,6 +80,7 @@ class AnomalyDetection:
         self.__write_cluster_files(X_quantized)
         self.__calculate_cluster_PFSAs()
         self.__calculate_PFSA_stats()
+        # self.__reduce_clusters()
         self.fitted = True
 
         return self
@@ -134,10 +135,11 @@ class AnomalyDetection:
         cluster_llk_vec = np.empty([self.n_clusters, num_predictions], dtype=np.float64)
         anomaly_vec = np.zeros(num_predictions, dtype=np.int64)
         for i in range(self.n_clusters):
-            curr_llks = Llk(seqfile=seqfile, pfsafile=self.cluster_PFSAs[i]).run()
+            curr_llks = Llk(seqfile=seqfile, pfsafile=self.cluster_PFSA_files[i]).run()
             cluster_llk_vec[i] = curr_llks
             # classify llk as anomaly if greater than X standard deviations above the mean
             upper_bound = self.PFSA_llk_means[i] + (self.PFSA_llk_stds[i] * self.anomaly_sensitivity)
+            # diffs = curr_llks - upper_bound
             for j, llk in enumerate(curr_llks):
                 anomaly_vec[j] += 1 if llk > upper_bound else 0
 
@@ -167,7 +169,7 @@ class AnomalyDetection:
             raise ValueError("Model has not been fit yet")
 
         PFSAs = {}
-        for i, cluster_file in enumerate(self.cluster_PFSAs):
+        for i, cluster_file in enumerate(self.cluster_PFSA_files):
             with open(cluster_file, "r") as f:
                 # parse PFSA file
                 next_val = lambda f: next(f).split(":")[1].strip()
@@ -222,8 +224,8 @@ class AnomalyDetection:
 
         # write PFSA files
         for i in range(self.n_clusters):
-            self.cluster_PFSAs[i] = RANDOM_NAME(path=self.temp_dir)
-            with open(self.cluster_PFSAs[i], "w") as f:
+            self.cluster_PFSA_files[i] = RANDOM_NAME(path=self.temp_dir)
+            with open(self.cluster_PFSA_files[i], "w") as f:
                 f.write(f"%ANN_ERR: {PFSAs[i]['%ANN_ERR']}\n")
                 f.write(f"%MRG_EPS: {PFSAs[i]['%MRG_EPS']}\n")
                 f.write(f"%SYN_STR: ")
@@ -261,8 +263,8 @@ class AnomalyDetection:
         for i in range(self.n_clusters):
             print(f"Cluster {i} PFSA:")
             for prop in properties:
-                print(f"{prop}: {self.cluster_PFSAs_info[i][prop]}")
-            if i != len(self.cluster_PFSAs_info) - 1:
+                print(f"{prop}: {self.cluster_PFSA_info[i][prop]}")
+            if i != len(self.cluster_PFSA_info) - 1:
                 print("\n")
 
 
@@ -370,13 +372,13 @@ class AnomalyDetection:
     def __calculate_cluster_PFSAs(self):
         """ Infer PFSAs from clusters using genESeSS """
 
-        cluster_PFSAs = []
+        cluster_PFSA_files = []
         dot_files = []
         for i, cluster_file in enumerate(self.cluster_files):
             if self.verbose:
                 print(f"Generating cluster PFSA {i + 1}/{self.n_clusters}...")
             PFSA_file = RANDOM_NAME(path=self.temp_dir)
-            cluster_PFSAs.append(PFSA_file)
+            cluster_PFSA_files.append(PFSA_file)
             dot_file = RANDOM_NAME(path=self.temp_dir)
             dot_files.append(dot_file)
             alg = GenESeSS(
@@ -396,9 +398,9 @@ class AnomalyDetection:
             PFSA_info["%SYM_FRQ"] = alg.symbol_frequency
             PFSA_info["%PITILDE"] = alg.probability_morph_matrix
             PFSA_info["%CONNX"] = alg.connectivity_matrix
-            self.cluster_PFSAs_info.append(PFSA_info)
+            self.cluster_PFSA_info.append(PFSA_info)
 
-        self.cluster_PFSAs = cluster_PFSAs
+        self.cluster_PFSA_files = cluster_PFSA_files
         self.dot_files = dot_files
 
 
@@ -412,8 +414,8 @@ class AnomalyDetection:
 
         PFSA_llk_means = []
         PFSA_llk_stds = []
-        for i in range(len(self.cluster_PFSAs)):
-            llks = np.array(Llk(seqfile=self.cluster_files[i], pfsafile=self.cluster_PFSAs[i]).run())
+        for i in range(self.n_clusters):
+            llks = np.array(Llk(seqfile=self.cluster_files[i], pfsafile=self.cluster_PFSA_files[i]).run())
             PFSA_llk_means.append(np.mean(llks))
             PFSA_llk_stds.append(np.std(llks))
 
@@ -425,7 +427,22 @@ class AnomalyDetection:
             generate similar PFSAs
         """
 
-        pass
+        # generate representative sequences for each cluster PFSA
+        seqs_per_pfsa = 1
+        seqs = pd.DataFrame()
+        for pfsa in self.cluster_PFSA_files:
+            curr_seqs = pd.DataFrame(Prun(pfsafile=pfsa, data_len=10000, num_repeats=seqs_per_pfsa).run())
+            seqs = pd.concat([seqs, curr_seqs], axis=0)
+        seqfile = RANDOM_NAME(path=self.temp_dir)
+        seqs.to_csv(seqfile, sep=" ", header=False, index=False)
+
+        for i, pfsa in enumerate(self.cluster_PFSA_files):
+            curr_llks = np.array(Llk(seqfile=seqfile, pfsafile=pfsa).run())
+            diffs = curr_llks - self.PFSA_llk_means[i]
+            # print(i, curr_llks)
+            # print(i, diffs)
+            # print(f"mean: {self.PFSA_llk_means[i]}, std: {self.PFSA_llk_stds[i]}")
+            # print("\n")
 
 
 class StreamingDetection(AnomalyDetection):
