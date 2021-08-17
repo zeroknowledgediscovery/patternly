@@ -2,4 +2,4 @@ scikit-learn
 scipy
 numpy
 pandas
-zedsuite
+zedsuite>=0.0.2

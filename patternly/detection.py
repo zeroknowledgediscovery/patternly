@@ -106,9 +106,9 @@ class AnomalyDetection:
         seqfile = ""
         num_predictions = 0
         # commonly want to find anomalies in original data
-        if X is None and os.path.isfile(self.data_file):
+        if X is None:
             # occurs when model is loaded from pickle file
-            if self.data is None or self.data == "":
+            if self.data_file is None or self.data_file == "" or not os.path.isfile(self.data_file):
                 raise ValueError("Original data not found. Pass data to predict().")
             seqfile = self.data_file
             num_predictions = len(self.cluster_labels) # same as shape of data, len(self.cluster_labels) != self.n_clusters
@@ -435,7 +435,7 @@ class AnomalyDetection:
             for syn_str in PFSA_info["%SYN_STR"]:
                 syn_str_vals += (f"{syn_str} ")
 
-        sym_frq_vals = ""
+        sym_frq_vals = indent
         for sym_frq in PFSA_info["%SYM_FRQ"]:
             sym_frq_vals += (f"{sym_frq} ")
 
