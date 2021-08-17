@@ -7,11 +7,10 @@ else
 fi
 
 a=$((`awk -F= '{print $2}' version.py  | sed "s/\s*'//g" | awk -F. '{print $NF}'` + 1))
-VERSION=`awk -F= '{print $2}' version.py  | sed "s/\s*'//g" | awk -F. 'BEGIN{OFS="."}{print $1,$2,$3}'`
+VERSION=`awk -F= '{print $2}' version.py  | sed "s/\s*'//g"`
 NEW_VERSION=`awk -F= '{print $2}' version.py  | sed "s/\s*'//g" | awk -F. 'BEGIN{OFS="."}{print $1,$2}'`.$a
 
 echo __version__ = \'$VERSION\'
-echo __version__ = \'$NEW_VERSION\' > version.py
 
 rm -rf dist
 python3 setup.py sdist
@@ -27,4 +26,4 @@ git push --tags
 twine check dist/*
 twine upload dist/*
 
-
+echo __version__ = \'$NEW_VERSION\' > version.py
