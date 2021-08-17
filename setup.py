@@ -10,7 +10,7 @@ example_dir = 'examples/'
 example_data_dir = example_dir + 'example_data/'
 
 version = {}
-with open("version.py") as fp:
+with open('version.py') as fp:
     exec(fp.read(), version)
 
 here = path.abspath(path.dirname(__file__))
@@ -40,21 +40,21 @@ setup(
     long_description=long_description,
     long_description_content_type='text/x-rst',
     install_requires=[
-        "scikit-learn",
-        "scipy",
-        "numpy",
-        "pandas",
-        'zedsuite'
+        'scikit-learn',
+        'scipy',
+        'numpy',
+        'pandas',
+        'zedsuite>=0.0.2'
     ],
     python_requires='>=3.6',
     classifiers=[
         'Development Status :: 4 - Beta',
-        "Intended Audience :: Developers",
-        "Intended Audience :: Science/Research",
-        "Topic :: Scientific/Engineering :: Information Analysis",
-        "Topic :: Software Development :: Libraries",
-        "License :: OSI Approved :: MIT License",
-        "Programming Language :: Python :: 3.6"
+        'Intended Audience :: Developers',
+        'Intended Audience :: Science/Research',
+        'Topic :: Scientific/Engineering :: Information Analysis',
+        'Topic :: Software Development :: Libraries',
+        'License :: OSI Approved :: MIT License',
+        'Programming Language :: Python :: 3.6'
     ],
     include_package_data=True,
 )

@@ -2,8 +2,9 @@ import os
 import pickle
 import numpy as np
 import pandas as pd
+from copy import deepcopy
 from sklearn.cluster import KMeans
-from zedsuite.zutil import Llk, Lsmash, Prun
+from zedsuite.zutil import Llk, Lsmash, Prun, DrawPFSA
 from zedsuite.genesess import GenESeSS
 from zedsuite.quantizer import Quantizer
 from patternly._utils import RANDOM_NAME, os_remove
@@ -44,6 +45,7 @@ class AnomalyDetection:
         self.eps = eps
         self.verbose = verbose
         self.temp_dir = "zed_temp"
+        self.PFSA_prop_titles =  ["%ANN_ERR", "%MRG_EPS", "%SYN_STR", "%SYM_FRQ", "%PITILDE", "%CONNX"]
 
         # values calculated in self.fit()
         self.fitted = False                # whether model has been fit
@@ -52,7 +54,7 @@ class AnomalyDetection:
         self.dist_matrix = pd.DataFrame()  # calculated by lsmash, used for clustering
         self.cluster_labels = []           # list of cluster labels
         self.cluster_files = []            # list of file paths to clusters
-        self.dot_files = []                # list of file paths to PFSA dot files
+        self.PFSA_pngs = []                # list of file paths to PFSA pngs
         self.cluster_PFSA_files = []       # list of file paths to cluster PFSAs
         self.cluster_PFSA_info = []        # list of dicts of cluster PFSAs info for printing
         self.PFSA_llk_means = []           # list of mean llk for each cluster
@@ -105,8 +107,11 @@ class AnomalyDetection:
         num_predictions = 0
         # commonly want to find anomalies in original data
         if X is None and os.path.isfile(self.data_file):
+            # occurs when model is loaded from pickle file
+            if self.data is None or self.data == "":
+                raise ValueError("Original data not found. Pass data to predict().")
             seqfile = self.data_file
-            num_predictions = len(self.cluster_labels)
+            num_predictions = len(self.cluster_labels) # same as shape of data, len(self.cluster_labels) != self.n_clusters
         else:
             # if type(X) is str and not self.quantize:
             #     seqfile = X
@@ -168,38 +173,11 @@ class AnomalyDetection:
         if not self.fitted:
             raise ValueError("Model has not been fit yet")
 
-        PFSAs = {}
-        for i, cluster_file in enumerate(self.cluster_PFSA_files):
-            with open(cluster_file, "r") as f:
-                # parse PFSA file
-                next_val = lambda f: next(f).split(":")[1].strip()
-                ann_err = float(next_val(f))
-                mrg_eps = float(next_val(f))
-                try:
-                    syn_str = [int(val.strip()) for val in next_val(f).split(" ")]
-                except:
-                    syn_str = None
-                sym_frq = [float(n) for n in next_val(f).split(" ")]
-                size = int(next_val(f).split("(")[1].split(")")[0])
-                next(f) # skip #PITILDE line
-                pitilde = [[float(val) for val in next(f).strip().split(" ")] for _ in range(size)]
-                size = int(next_val(f).split("(")[1].split(")")[0])
-                next(f) # skip #CONNX line
-                connx = [[int(val) for val in next(f).strip().split(" ")] for _ in range(size)]
-
-                PFSAs[i] = {
-                    "%ANN_ERR": ann_err,
-                    "%MRG_EPS": mrg_eps,
-                    "%SYN_STR": syn_str,
-                    "%SYM_FRQ": sym_frq,
-                    "%PITILDE": pitilde,
-                    "%CONNX": connx,
-                }
-
-        model = {
-            "self": self,
-            "PFSAs": PFSAs,
-        }
+        model = deepcopy(self)
+        model.data_file = ""
+        model.cluster_files = []
+        model.cluster_PFSA_files = []
+        model.PFSA_pngs = []
 
         with open(path, "wb") as f:
             pickle.dump(model, f)
@@ -219,36 +197,18 @@ class AnomalyDetection:
         with open(path, "rb") as f:
             model = pickle.load(f)
 
-        self = model["self"]
-        PFSAs = model["PFSAs"]
+        self = model
+        self.cluster_files = []
+        self.cluster_PFSA_files = []
+        self.generate_PFSA_pngs()
 
         # write PFSA files
         for i in range(self.n_clusters):
-            self.cluster_PFSA_files[i] = RANDOM_NAME(path=self.temp_dir)
+            self.cluster_PFSA_files.append(RANDOM_NAME(path=self.temp_dir))
             with open(self.cluster_PFSA_files[i], "w") as f:
-                f.write(f"%ANN_ERR: {PFSAs[i]['%ANN_ERR']}\n")
-                f.write(f"%MRG_EPS: {PFSAs[i]['%MRG_EPS']}\n")
-                f.write(f"%SYN_STR: ")
-                for sym_frq in PFSAs[i]["%SYM_FRQ"]:
-                    suffix = " " if str(sym_frq) != str(PFSAs[i]["%SYM_FRQ"][-1]) else " \n"
-                    f.write(f"{sym_frq}{suffix}")
-                f.write(f"%SYM_FRQ: ")
-                for sym_frq in PFSAs[i]["%SYM_FRQ"]:
-                    suffix = " " if str(sym_frq) != str(PFSAs[i]["%SYM_FRQ"][-1]) else " \n"
-                    f.write(f"{sym_frq}{suffix}")
-                f.write(f"%PITILDE: size({len(PFSAs[i]['%PITILDE'])})\n")
-                f.write(f"#PITILDE\n")
-                for pitilde in PFSAs[i]["%PITILDE"]:
-                    for val in pitilde:
-                        suffix = " " if str(val) != str(pitilde[-1]) else " \n"
-                        f.write(f"{val}{suffix}")
-                f.write(f"%CONNX: size({len(PFSAs[i]['%CONNX'])})\n")
-                f.write(f"#CONNX\n")
-                for connx in PFSAs[i]["%CONNX"]:
-                    for val in connx:
-                        suffix = " " if str(val) != str(connx[-1]) else " \n"
-                        f.write(f"{val}{suffix}")
-                f.write("\n")
+                f.write(f"{self.__format_PFSA_info(self.cluster_PFSA_info[i])}\n")
+
+        self.generate_PFSA_pngs()
 
         return self
 
@@ -259,13 +219,24 @@ class AnomalyDetection:
         if not self.fitted:
             raise ValueError("Model has not been fit yet")
 
-        properties = ["%ANN_ERR", "%MRG_EPS", "%SYN_STR", "%SYM_FRQ", "%PITILDE", "%CONNX"]
         for i in range(self.n_clusters):
             print(f"Cluster {i} PFSA:")
-            for prop in properties:
-                print(f"{prop}: {self.cluster_PFSA_info[i][prop]}")
-            if i != len(self.cluster_PFSA_info) - 1:
-                print("\n")
+            print(self.__format_PFSA_info(self.cluster_PFSA_info[i], indent_level=4))
+
+
+    def generate_PFSA_pngs(self):
+        """ Generates png files for PFSAs
+
+            Returns:
+                list[str]: list of file paths to png files
+        """
+        if self.PFSA_pngs is None:
+            self.PFSA_pngs = []
+            for i in range(self.n_clusters):
+                self.PFSA_pngs.append(RANDOM_NAME(path=self.temp_dir))
+                DrawPFSA(pfsafile=self.cluster_PFSA_files, graphpref=self.PFSA_pngs[i]).run()
+
+        return self.PFSA_pngs
 
 
     def __quantize(self, X):
@@ -373,14 +344,14 @@ class AnomalyDetection:
         """ Infer PFSAs from clusters using genESeSS """
 
         cluster_PFSA_files = []
-        dot_files = []
+        PFSA_pngs = []
         for i, cluster_file in enumerate(self.cluster_files):
             if self.verbose:
                 print(f"Generating cluster PFSA {i + 1}/{self.n_clusters}...")
             PFSA_file = RANDOM_NAME(path=self.temp_dir)
             cluster_PFSA_files.append(PFSA_file)
             dot_file = RANDOM_NAME(path=self.temp_dir)
-            dot_files.append(dot_file)
+            PFSA_pngs.append(dot_file)
             alg = GenESeSS(
                 datafile=cluster_file,
                 outfile=PFSA_file,
@@ -391,17 +362,18 @@ class AnomalyDetection:
                 dot=dot_file,
             )
             alg.run()
-            PFSA_info = {}
-            PFSA_info["%ANN_ERR"] = alg.inference_error
-            PFSA_info["%MRG_EPS"] = alg.epsilon_used
-            PFSA_info["%SYN_STR"] = alg.synchronizing_string_found
-            PFSA_info["%SYM_FRQ"] = alg.symbol_frequency
-            PFSA_info["%PITILDE"] = alg.probability_morph_matrix
-            PFSA_info["%CONNX"] = alg.connectivity_matrix
-            self.cluster_PFSA_info.append(PFSA_info)
+            prop_vals = [
+                alg.inference_error,
+                alg.epsilon_used,
+                alg.synchronizing_string_found,
+                alg.symbol_frequency,
+                alg.probability_morph_matrix,
+                alg.connectivity_matrix,
+            ]
+            self.cluster_PFSA_info.append(dict(zip(self.PFSA_prop_titles, prop_vals)))
 
         self.cluster_PFSA_files = cluster_PFSA_files
-        self.dot_files = dot_files
+        self.PFSA_pngs = PFSA_pngs
 
 
     def __calculate_PFSA_stats(self):
@@ -443,6 +415,55 @@ class AnomalyDetection:
             # print(i, diffs)
             # print(f"mean: {self.PFSA_llk_means[i]}, std: {self.PFSA_llk_stds[i]}")
             # print("\n")
+
+
+    def __format_PFSA_info(self, PFSA_info, indent_level=0):
+        """ Format the PFSA information for output
+
+            Args:
+                PFSA_info (dict): PFSA information to format
+                indent_level (int): indentation level for formatting
+
+            Returns:
+                str: formatted PFSA information
+        """
+
+        indent = indent_level * " "
+
+        syn_str_vals = indent
+        if PFSA_info["%SYN_STR"] is not None:
+            for syn_str in PFSA_info["%SYN_STR"]:
+                syn_str_vals += (f"{syn_str} ")
+
+        sym_frq_vals = ""
+        for sym_frq in PFSA_info["%SYM_FRQ"]:
+            sym_frq_vals += (f"{sym_frq} ")
+
+        pitilde_vals = indent
+        for row in PFSA_info["%PITILDE"]:
+            for val in row:
+                suffix = " " if str(val) != str(row[-1]) else f" \n{indent}"
+                pitilde_vals += (f"{val}{suffix}")
+        pitilde_vals = pitilde_vals[:-len(indent)] if indent_level > 0 else pitilde_vals
+
+        connx_vals = indent
+        for row in PFSA_info["%CONNX"]:
+            for val in row:
+                suffix = " " if str(val) != str(row[-1]) else f" \n{indent}"
+                connx_vals += (f"{val}{suffix}")
+        connx_vals = pitilde_vals[:-len(indent)] if indent_level > 0 else connx_vals
+
+
+        return (
+            f"{indent}%ANN_ERR: {PFSA_info['%ANN_ERR']}\n"
+            + f"{indent}%MRG_EPS: {PFSA_info['%MRG_EPS']}\n"
+            + f"{indent}%SYN_STR: {syn_str_vals}\n"
+            + f"{indent}%SYM_FRQ: {sym_frq_vals}\n"
+            + f"{indent}%PITILDE: size({len(PFSA_info['%PITILDE'])})\n"
+            + f"{indent}#PITILDE\n{pitilde_vals}"
+            + f"{indent}%CONNX: size({len(PFSA_info['%CONNX'])})\n"
+            + f"{indent}#CONNX\n{connx_vals}\n"
+        )
 
 
 class StreamingDetection(AnomalyDetection):
