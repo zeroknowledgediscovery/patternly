@@ -20,7 +20,7 @@ git add * -v
 git commit -m "$COMMENT"
 git push
 
-git tag $VERSION -m $COMMENT
+git tag $VERSION -m "$COMMENT"
 git push --tags
 
 twine check dist/*

@@ -44,7 +44,7 @@ setup(
         'scipy',
         'numpy',
         'pandas',
-        'zedsuite>=0.0.2'
+        'zedsuite>=0.0.3'
     ],
     python_requires='>=3.6',
     classifiers=[
