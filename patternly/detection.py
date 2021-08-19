@@ -1,4 +1,3 @@
-import os
 import pickle
 import numpy as np
 import pandas as pd
@@ -74,7 +73,7 @@ class AnomalyDetection:
         """ Fit an anomaly detection model
 
         Args:
-            X (pd.DataFrame): time series data to be fit
+            X (pd.DataFrame or pd.Series): time series data to be fit
             y (pd.Series, optional): labels for X only provided for sklearn standard (Default = None)
 
         Returns:
@@ -114,7 +113,7 @@ class AnomalyDetection:
             # occurs when model is loaded from pickle file
             if self.quantized_data is None:
                 raise ValueError("Original data not found. Pass data to predict().")
-            data = self.quantized_data
+            data = self.quantized_data.drop(columns=["cluster"], axis=1)
             num_predictions = self.quantized_data.shape[0]
         else:
             data = self.__quantize(X)
@@ -257,7 +256,9 @@ class AnomalyDetection:
         if self.n_clusters == 1:
             self.dist_matrix = self.quantized_data
         else:
-            self.dist_matrix = pd.DataFrame(Lsmash(data=self.quantized_data, data_type="symbolic", sae=False).run()).round(8)
+            self.dist_matrix = pd.DataFrame(
+                Lsmash(data=self.quantized_data, data_type="symbolic", sae=False).run()
+            ).round(8)
 
 
     def __calculate_cluster_labels(self):
@@ -296,7 +297,7 @@ class AnomalyDetection:
         for i in range(self.n_clusters):
             if self.verbose:
                 print(f"Generating cluster PFSA {i + 1}/{self.n_clusters}...")
-            cluster_data = self.quantized_data[self.quantized_data["cluster"] == i].drop("cluster", axis=1)
+            cluster_data = self.quantized_data[self.quantized_data["cluster"] == i].drop(columns=["cluster"], axis=1)
             cluster_PFSA_file = RANDOM_NAME(path=self.temp_dir)
             dot_file = RANDOM_NAME(path=self.temp_dir)
             cluster_PFSA_files.append(cluster_PFSA_file)
@@ -336,7 +337,7 @@ class AnomalyDetection:
         PFSA_llk_means = []
         PFSA_llk_stds = []
         for i in range(self.n_clusters):
-            cluster_data = self.quantized_data[self.quantized_data["cluster"] == i].drop("cluster", axis=1)
+            cluster_data = self.quantized_data[self.quantized_data["cluster"] == i].drop(columns=["cluster"], axis=1)
             llks = np.asarray(Llk(data=cluster_data, pfsafile=self.cluster_PFSA_files[i]).run())
             PFSA_llk_means.append(np.mean(llks))
             PFSA_llk_stds.append(np.std(llks))
@@ -355,14 +356,12 @@ class AnomalyDetection:
         for pfsa in self.cluster_PFSA_files:
             curr_seqs = pd.DataFrame(Prun(pfsafile=pfsa, data_len=10000, num_repeats=seqs_per_pfsa).run())
             seqs = pd.concat([seqs, curr_seqs], axis=0)
-        seqfile = RANDOM_NAME(path=self.temp_dir)
-        seqs.to_csv(seqfile, sep=" ", header=False, index=False)
 
         self.predict(seqs)
         mismatches = pd.concat([pd.DataFrame(self.closest_match), pd.DataFrame(self.cluster_labels)], axis=1)
 
         for i, pfsa in enumerate(self.cluster_PFSA_files):
-            curr_llks = np.array(Llk(seqfile=seqfile, pfsafile=pfsa).run())
+            curr_llks = np.array(Llk(data=seqs, pfsafile=pfsa).run())
             diffs = curr_llks - self.PFSA_llk_means[i]
             # print(i, curr_llks)
             # print(i, diffs)
@@ -406,7 +405,6 @@ class AnomalyDetection:
                 connx_vals += (f"{val}{suffix}")
         connx_vals = pitilde_vals[:-len(indent)] if indent_level > 0 else connx_vals
 
-
         return (
             f"{indent}%ANN_ERR: {PFSA_info['%ANN_ERR']}\n"
             + f"{indent}%MRG_EPS: {PFSA_info['%MRG_EPS']}\n"
@@ -449,7 +447,7 @@ class StreamingDetection(AnomalyDetection):
             that overlap by self.overlap
 
             Args:
-                X (pd.DataFrame): data to be split into streams
+                X (pd.Series): data to be split into streams
         """
 
         if (self.verbose):
