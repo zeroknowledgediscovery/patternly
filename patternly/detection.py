@@ -85,7 +85,7 @@ class AnomalyDetection:
         self.__calculate_cluster_labels()
         self.__calculate_cluster_PFSAs()
         self.__calculate_PFSA_stats()
-        # self.__reduce_clusters()
+        self.__reduce_clusters()
         self.fitted = True
 
         return self
@@ -358,7 +358,7 @@ class AnomalyDetection:
             seqs = pd.concat([seqs, curr_seqs], axis=0)
 
         self.predict(seqs)
-        mismatches = pd.concat([pd.DataFrame(self.closest_match), pd.DataFrame(self.cluster_labels)], axis=1)
+        self.mismatches = pd.concat([pd.DataFrame(self.closest_match), pd.DataFrame(self.cluster_labels)], axis=1)
 
         for i, pfsa in enumerate(self.cluster_PFSA_files):
             curr_llks = np.array(Llk(data=seqs, pfsafile=pfsa).run())
