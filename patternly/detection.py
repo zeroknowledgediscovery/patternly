@@ -1,7 +1,9 @@
 import pickle
 import numpy as np
+from numpy.core.fromnumeric import searchsorted
 import pandas as pd
 from copy import deepcopy
+from sklearn import cluster
 from sklearn.cluster import KMeans
 from zedsuite.zutil import Llk, Lsmash, Prun, DrawPFSA
 from zedsuite.genesess import GenESeSS
@@ -119,22 +121,16 @@ class AnomalyDetection:
             data = self.__quantize(X)
             num_predictions = 1 if type(X) is pd.Series else data.shape[0]
 
-        cluster_llks = np.empty([self.n_clusters, num_predictions], dtype=np.float64)
-        anomaly_vec = np.zeros(num_predictions, dtype=np.int64)
+        cluster_llks = np.empty(shape=(self.n_clusters, num_predictions), dtype=np.float64)
         for i in range(self.n_clusters):
-            curr_llks = Llk(data=data, pfsafile=self.cluster_PFSA_files[i]).run()
-            cluster_llks[i] = curr_llks
-            # classify llk as anomaly if greater than X standard deviations above the mean
-            upper_bound = self.PFSA_llk_means[i] + (self.PFSA_llk_stds[i] * self.anomaly_sensitivity)
-            # diffs = curr_llks - upper_bound
-            for j, llk in enumerate(curr_llks):
-                anomaly_vec[j] += 1 if llk > upper_bound else 0
+            cluster_llks[i] = np.asarray(Llk(data=data, pfsafile=self.cluster_PFSA_files[i]).run())
+
+        # consider to be anomaly if all llks above specified upper bound (X standard deviations above the mean)
+        upper_bounds = self.PFSA_llk_means + (self.PFSA_llk_stds * self.anomaly_sensitivity)
+        predictions = np.all(cluster_llks.T > upper_bounds, axis=1)
 
         self.cluster_llks = cluster_llks
         self.closest_match = np.argmin(cluster_llks, axis=0)
-
-        # consider to be anomaly if all llks above specified upper bound
-        predictions = [x == self.n_clusters for x in anomaly_vec]
 
         if len(predictions) == 1:
             predictions = predictions[0]
@@ -334,13 +330,13 @@ class AnomalyDetection:
         if self.verbose:
             print("Calculating cluster PFSA means and stds...")
 
-        PFSA_llk_means = []
-        PFSA_llk_stds = []
+        PFSA_llk_means = np.empty(shape=self.n_clusters)
+        PFSA_llk_stds = np.empty(shape=self.n_clusters)
         for i in range(self.n_clusters):
             cluster_data = self.quantized_data[self.quantized_data["cluster"] == i].drop(columns=["cluster"], axis=1)
             llks = np.asarray(Llk(data=cluster_data, pfsafile=self.cluster_PFSA_files[i]).run())
-            PFSA_llk_means.append(np.mean(llks))
-            PFSA_llk_stds.append(np.std(llks))
+            PFSA_llk_means[i] = np.mean(llks)
+            PFSA_llk_stds[i] = np.std(llks, ddof=1)
 
         self.PFSA_llk_means, self.PFSA_llk_stds = PFSA_llk_means, PFSA_llk_stds
 
@@ -357,17 +353,21 @@ class AnomalyDetection:
             curr_seqs = pd.DataFrame(Prun(pfsafile=pfsa, data_len=10000, num_repeats=seqs_per_pfsa).run())
             seqs = pd.concat([seqs, curr_seqs], axis=0)
 
-        self.predict(seqs)
-        self.mismatches = pd.concat([pd.DataFrame(self.closest_match), pd.DataFrame(self.cluster_labels)], axis=1)
 
+        cluster_llks = []
+        labels = range(self.n_clusters)
         for i, pfsa in enumerate(self.cluster_PFSA_files):
-            curr_llks = np.array(Llk(data=seqs, pfsafile=pfsa).run())
+            curr_llks = np.asarray(Llk(data=seqs, pfsafile=pfsa).run())
             diffs = curr_llks - self.PFSA_llk_means[i]
+            cluster_llks.append(curr_llks)
             # print(i, curr_llks)
             # print(i, diffs)
             # print(f"mean: {self.PFSA_llk_means[i]}, std: {self.PFSA_llk_stds[i]}")
             # print("\n")
 
+        self.closest_match = np.argmin(cluster_llks, axis=0)
+        self.mismatches = pd.concat([pd.DataFrame(self.closest_match), pd.DataFrame(labels)], axis=1)
+        self.cluster_llks = cluster_llks
 
     def __format_PFSA_info(self, PFSA_info, indent_level=0):
         """ Format the PFSA information for output
@@ -431,9 +431,11 @@ class StreamingDetection(AnomalyDetection):
         self.window_size = window_size
         self.window_overlap = window_overlap
 
+
     def fit(self, X, y=None):
         X_split_streams = self.__split_streams(X)
         super().fit(X_split_streams)
+
 
     def predict(self, X=None):
         if X is None:
@@ -441,6 +443,7 @@ class StreamingDetection(AnomalyDetection):
         else:
             X_split_streams = self.__split_streams(X)
             return super().predict(X_split_streams)
+
 
     def __split_streams(self, X):
         """ Split stream data into individual streams of length self.window_size
@@ -460,4 +463,3 @@ class StreamingDetection(AnomalyDetection):
             [X[beg(i):end(i)].reset_index(drop=True) for i in range(size)],
             axis=1
         ).T
-
