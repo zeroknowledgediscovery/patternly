@@ -1,9 +1,7 @@
 import pickle
 import numpy as np
-from numpy.core.fromnumeric import searchsorted
 import pandas as pd
 from copy import deepcopy
-from sklearn import cluster
 from sklearn.cluster import KMeans
 from zedsuite.zutil import Llk, Lsmash, Prun, DrawPFSA
 from zedsuite.genesess import GenESeSS

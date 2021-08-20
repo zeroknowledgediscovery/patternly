@@ -1,9 +1,9 @@
 """
 Detecting emergent anomlaies in data streams without
-prior specification of templates of anomalous 
-dynamics. Uses Probabilistic Finite Automata 
+prior specification of templates of anomalous
+dynamics. Uses Probabilistic Finite Automata
 moels to infer classes of normal behaviors, and
-emergent anomalies. 
+emergent anomalies.
 
 
 Installation:
@@ -16,4 +16,4 @@ Installation:
    ```
 """
 from patternly._utils import RANDOM_NAME, os_remove
-from patternly.detection import AnomalyDetection
+from patternly.detection import AnomalyDetection, StreamingDetection
