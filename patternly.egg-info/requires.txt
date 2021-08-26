@@ -2,4 +2,5 @@ scikit-learn
 scipy
 numpy
 pandas
+dill
 zedsuite>=0.0.4

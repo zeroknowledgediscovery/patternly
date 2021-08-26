@@ -44,6 +44,7 @@ setup(
         'scipy',
         'numpy',
         'pandas',
+        'dill',
         'zedsuite>=0.0.4'
     ],
     python_requires='>=3.6',
