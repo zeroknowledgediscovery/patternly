@@ -1,7 +1,6 @@
-import pickle
+import dill
 import numpy as np
 import pandas as pd
-from copy import deepcopy
 from sklearn.cluster import KMeans
 from zedsuite.zutil import Llk, Lsmash, Prun, DrawPFSA
 from zedsuite.genesess import GenESeSS
@@ -110,7 +109,7 @@ class AnomalyDetection:
         num_predictions = 0
         # commonly want to find anomalies in original data
         if X is None:
-            # occurs when model is loaded from pickle file
+            # occurs when model is loaded from file
             if self.quantized_data is None:
                 raise ValueError("Original data not found. Pass data to predict().")
             data = self.quantized_data.drop(columns=["cluster"], axis=1)
@@ -119,9 +118,9 @@ class AnomalyDetection:
             data = self.__quantize(X)
             num_predictions = 1 if type(X) is pd.Series else data.shape[0]
 
-        cluster_llks = np.empty(shape=(self.n_clusters, num_predictions), dtype=np.float64)
+        cluster_llks = np.empty(shape=(self.n_clusters, num_predictions), dtype=np.float32)
         for i in range(self.n_clusters):
-            cluster_llks[i] = np.asarray(Llk(data=data, pfsafile=self.cluster_PFSA_files[i]).run())
+            cluster_llks[i] = np.asarray(Llk(data=data, pfsafile=self.cluster_PFSA_files[i]).run(), dtype=np.float32)
 
         # consider to be anomaly if all llks above specified upper bound (X standard deviations above the mean)
         upper_bounds = self.PFSA_llk_means + (self.PFSA_llk_stds * self.anomaly_sensitivity)
@@ -146,13 +145,29 @@ class AnomalyDetection:
         if not self.fitted:
             raise ValueError("Model has not been fit yet")
 
-        model = deepcopy(self)
-        model.quantized_data = None
-        model.cluster_PFSA_files = []
-        model.cluster_PFSA_pngs = []
+        metadata = {
+            "modeltype": type(self),
+            "user_params": {
+                "anomaly_sensitivity": self.anomaly_sensitivity,
+                "n_clusters": self.n_clusters,
+                "clustering_alg": self.clustering_alg,
+                "quantize": self.quantize,
+                "quantize_type": self.quantize_type,
+                "eps": self.eps,
+                "verbose": self.verbose,
+            },
+            "fitted_params": {
+                "quantizer_parameters": None if not self.quantize else self.quantizer.parameters ,
+                "quantizer_feature_order": None if not self.quantize else self.quantizer._feature_order,
+                "cluster_labels": self.cluster_labels,
+                "cluster_PFSA_info": self.cluster_PFSA_info,
+                "PFSA_llk_means": self.PFSA_llk_means,
+                "PFSA_llk_stds": self.PFSA_llk_stds
+            }
+        }
 
         with open(path, "wb") as f:
-            pickle.dump(model, f)
+            dill.dump(metadata, f)
 
 
     @staticmethod
@@ -167,21 +182,30 @@ class AnomalyDetection:
         """
 
         with open(path, "rb") as f:
-            model = pickle.load(f)
+            metadata = dill.load(f)
 
-        self = model
-        self.cluster_PFSA_files = []
-        self.generate_PFSA_pngs()
+        model = metadata["modeltype"](**metadata["user_params"])
+        if model.quantize:
+            model.quantizer = Quantizer(n_quantizations=1, eps=-1)
+            model.quantizer.parameters = metadata["fitted_params"]["quantizer_parameters"]
+            model.quantizer._feature_order = metadata["fitted_params"]["quantizer_feature_order"]
+        model.cluster_labels = metadata["fitted_params"]["cluster_labels"]
+        model.cluster_PFSA_info = metadata["fitted_params"]["cluster_PFSA_info"]
+        model.PFSA_llk_means = metadata["fitted_params"]["PFSA_llk_means"]
+        model.PFSA_llk_stds = metadata["fitted_params"]["PFSA_llk_stds"]
+
+        model.cluster_PFSA_files = []
 
         # write PFSA files
-        for i in range(self.n_clusters):
-            self.cluster_PFSA_files.append(RANDOM_NAME(path=self.temp_dir))
-            with open(self.cluster_PFSA_files[i], "w") as f:
-                f.write(f"{self.__format_PFSA_info(self.cluster_PFSA_info[i])}\n")
+        for i in range(model.n_clusters):
+            model.cluster_PFSA_files.append(RANDOM_NAME(path=model.temp_dir))
+            with open(model.cluster_PFSA_files[i], "w") as f:
+                f.write(f"{model.__format_PFSA_info(model.cluster_PFSA_info[i])}\n")
 
-        self.generate_PFSA_pngs()
+        model.generate_PFSA_pngs()
+        model.fitted = True
 
-        return self
+        return model
 
 
     def print_PFSAs(self):
@@ -201,11 +225,10 @@ class AnomalyDetection:
             Returns:
                 list[str]: list of file paths to png files
         """
-        if self.cluster_PFSA_pngs is None:
-            self.cluster_PFSA_pngs = []
-            for i in range(self.n_clusters):
-                self.cluster_PFSA_pngs.append(RANDOM_NAME(path=self.temp_dir))
-                DrawPFSA(pfsafile=self.cluster_PFSA_files, graphpref=self.cluster_PFSA_pngs[i]).run()
+        self.cluster_PFSA_pngs = []
+        for i in range(self.n_clusters):
+            self.cluster_PFSA_pngs.append(RANDOM_NAME(path=self.temp_dir))
+            DrawPFSA(pfsafile=self.cluster_PFSA_files[i], graphpref=self.cluster_PFSA_pngs[i]).run()
 
         return self.cluster_PFSA_pngs
 
@@ -218,7 +241,7 @@ class AnomalyDetection:
         """
 
         if not self.quantize or self.quantize_type is None:
-            return X.copy(deep=False)
+            return X.copy(deep=False).astype(np.int8)
 
         if self.verbose:
             print("Quantizing...")
@@ -236,7 +259,11 @@ class AnomalyDetection:
             if not self.fitted:
                 self.quantizer = Quantizer(n_quantizations=1, epsilon=-1)
                 self.quantizer.fit(X)
-            return pd.concat([quantized for quantized in self.quantizer.transform(X)], axis=1)
+            return pd.concat(
+                [quantized for quantized in self.quantizer.transform(X)],
+                axis=1,
+                copy=False
+            ).astype(np.int8)
         else:
             raise ValueError(f"Unknown quantize type: {self.quantize_type}. Choose \"simple\" or \"complex\".")
 
@@ -251,8 +278,9 @@ class AnomalyDetection:
             self.dist_matrix = self.quantized_data
         else:
             self.dist_matrix = pd.DataFrame(
-                Lsmash(data=self.quantized_data, data_type="symbolic", sae=False).run()
-            ).round(8)
+                Lsmash(data=self.quantized_data, data_type="symbolic", sae=False).run(),
+                dtype=np.float32
+            )
 
 
     def __calculate_cluster_labels(self):
@@ -272,10 +300,10 @@ class AnomalyDetection:
         n_clusters = len(set(cluster_labels)) - (1 if -1 in cluster_labels else 0)
 
         # reassign clusters such that cluster 0 is the most common label, 1 is the second most common, etc.
-        cluster_counts = np.zeros(n_clusters, dtype=np.int64)
+        cluster_counts = np.zeros(n_clusters, dtype=np.int32)
         for cluster in cluster_labels:
             cluster_counts[cluster] += 1
-        cluster_rank = np.full(n_clusters, n_clusters - 1, dtype=np.int64) - np.argsort(np.argsort(cluster_counts))
+        cluster_rank = np.full(n_clusters, n_clusters - 1, dtype=np.int32) - np.argsort(np.argsort(cluster_counts))
         cluster_labels = [cluster_rank[cluster] for cluster in cluster_labels]
 
         self.n_clusters = n_clusters
@@ -332,7 +360,7 @@ class AnomalyDetection:
         PFSA_llk_stds = np.empty(shape=self.n_clusters)
         for i in range(self.n_clusters):
             cluster_data = self.quantized_data[self.quantized_data["cluster"] == i].drop(columns=["cluster"], axis=1)
-            llks = np.asarray(Llk(data=cluster_data, pfsafile=self.cluster_PFSA_files[i]).run())
+            llks = np.asarray(Llk(data=cluster_data, pfsafile=self.cluster_PFSA_files[i]).run(), dtype=np.float32)
             PFSA_llk_means[i] = np.mean(llks)
             PFSA_llk_stds[i] = np.std(llks, ddof=1)
 
@@ -437,7 +465,7 @@ class StreamingDetection(AnomalyDetection):
 
     def predict(self, X=None):
         if X is None:
-            return super().predict(X)
+            return super().predict()
         else:
             X_split_streams = self.__split_streams(X)
             return super().predict(X_split_streams)
