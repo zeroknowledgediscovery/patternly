@@ -178,7 +178,7 @@ class AnomalyDetection:
                 path (str): path to saved model
 
             Returns:
-                AnomalyDetection: loaded model
+                AnomalyDetection or StreamingDetection: loaded model
         """
 
         with open(path, "rb") as f:
@@ -194,15 +194,14 @@ class AnomalyDetection:
         model.PFSA_llk_means = metadata["fitted_params"]["PFSA_llk_means"]
         model.PFSA_llk_stds = metadata["fitted_params"]["PFSA_llk_stds"]
 
-        model.cluster_PFSA_files = []
-
         # write PFSA files
+        model.cluster_PFSA_files = []
         for i in range(model.n_clusters):
             model.cluster_PFSA_files.append(RANDOM_NAME(path=model.temp_dir))
             with open(model.cluster_PFSA_files[i], "w") as f:
                 f.write(f"{model.__format_PFSA_info(model.cluster_PFSA_info[i])}\n")
-
         model.generate_PFSA_pngs()
+
         model.fitted = True
 
         return model
