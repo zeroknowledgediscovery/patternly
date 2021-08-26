@@ -1,7 +1,8 @@
 import dill
 import numpy as np
 import pandas as pd
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, DBSCAN
+from sklearn.decomposition import PCA
 from zedsuite.zutil import Llk, Lsmash, Prun, DrawPFSA
 from zedsuite.genesess import GenESeSS
 from zedsuite.quantizer import Quantizer
@@ -57,6 +58,7 @@ class AnomalyDetection:
         self.quantized_data = None         # quantized data
         self.dist_matrix = pd.DataFrame()  # calculated by lsmash, used for clustering
         self.cluster_labels = []           # list of cluster labels
+        self.cluster_counts = []           # number of instances in each cluster
         self.cluster_PFSA_files = []       # list of file paths to cluster PFSAs
         self.cluster_PFSA_info = []        # list of dicts of cluster PFSAs info for printing
         self.cluster_PFSA_pngs = []        # list of file paths to PFSA pngs
@@ -83,8 +85,8 @@ class AnomalyDetection:
         self.__calculate_dist_matrix()
         self.__calculate_cluster_labels()
         self.__calculate_cluster_PFSAs()
-        self.__calculate_PFSA_stats()
         self.__reduce_clusters()
+        self.__calculate_PFSA_stats()
         self.fitted = True
 
         return self
@@ -199,7 +201,7 @@ class AnomalyDetection:
         for i in range(model.n_clusters):
             model.cluster_PFSA_files.append(RANDOM_NAME(path=model.temp_dir))
             with open(model.cluster_PFSA_files[i], "w") as f:
-                f.write(f"{model.__format_PFSA_info(model.cluster_PFSA_info[i])}\n")
+                f.write(f"{model.__format_PFSA_info(model.cluster_PFSA_info[i])}")
         model.generate_PFSA_pngs()
 
         model.fitted = True
@@ -306,6 +308,7 @@ class AnomalyDetection:
         cluster_labels = [cluster_rank[cluster] for cluster in cluster_labels]
 
         self.n_clusters = n_clusters
+        self.cluster_counts = cluster_counts
         self.cluster_labels = cluster_labels
         self.quantized_data["cluster"] = cluster_labels
 
@@ -347,6 +350,39 @@ class AnomalyDetection:
         self.cluster_PFSA_pngs = PFSA_pngs
 
 
+    def __reduce_clusters(self):
+        """ Attempt to reduce the number of clusters by combining clusters that
+            generate similar PFSAs
+        """
+
+        # generate representative sequences for each cluster PFSA
+        seq_len = 100000
+        seqs_per_pfsa = 1
+        cluster_seqs = [
+            Prun(pfsafile=pfsa, data_len=seq_len, num_repeats=seqs_per_pfsa).run()[0]
+            for pfsa in self.cluster_PFSA_files
+        ]
+
+        # perform PCA on distance matrix from generated sequences and cluster resulting components
+        # to determine similar PFSAs
+        dist_matrix = pd.DataFrame(Lsmash(data=cluster_seqs, data_type="symbolic", sae=False).run())
+        pca_components = PCA(n_components=2).fit(dist_matrix).components_
+        new_labels = DBSCAN(eps=0.5, min_samples=2).fit(pca_components.T).labels_
+
+        # remove a cluster that contains less than 1% of the data
+        decrease_clusters = 0
+        for i in range(len(new_labels)):
+            if new_labels[i] == -1:
+                if self.cluster_counts[i] < (len(self.cluster_labels) // 100):
+                    decrease_clusters += 1
+
+        new_n_clusters = len(set(new_labels)) - decrease_clusters
+        if new_n_clusters != self.n_clusters:
+            self.n_clusters = new_n_clusters
+            self.__calculate_cluster_labels()
+            self.__calculate_cluster_PFSAs()
+
+
     def __calculate_PFSA_stats(self):
         """ Calculate the means and standard deviations of llks for each PFSA
             to later determine if a sequence is an anomaly
@@ -365,34 +401,6 @@ class AnomalyDetection:
 
         self.PFSA_llk_means, self.PFSA_llk_stds = PFSA_llk_means, PFSA_llk_stds
 
-
-    def __reduce_clusters(self):
-        """ Attempt to reduce the number of clusters by combining clusters that
-            generate similar PFSAs
-        """
-
-        # generate representative sequences for each cluster PFSA
-        seqs_per_pfsa = 1
-        seqs = pd.DataFrame()
-        for pfsa in self.cluster_PFSA_files:
-            curr_seqs = pd.DataFrame(Prun(pfsafile=pfsa, data_len=10000, num_repeats=seqs_per_pfsa).run())
-            seqs = pd.concat([seqs, curr_seqs], axis=0)
-
-
-        cluster_llks = []
-        labels = range(self.n_clusters)
-        for i, pfsa in enumerate(self.cluster_PFSA_files):
-            curr_llks = np.asarray(Llk(data=seqs, pfsafile=pfsa).run())
-            diffs = curr_llks - self.PFSA_llk_means[i]
-            cluster_llks.append(curr_llks)
-            # print(i, curr_llks)
-            # print(i, diffs)
-            # print(f"mean: {self.PFSA_llk_means[i]}, std: {self.PFSA_llk_stds[i]}")
-            # print("\n")
-
-        self.closest_match = np.argmin(cluster_llks, axis=0)
-        self.mismatches = pd.concat([pd.DataFrame(self.closest_match), pd.DataFrame(labels)], axis=1)
-        self.cluster_llks = cluster_llks
 
     def __format_PFSA_info(self, PFSA_info, indent_level=0):
         """ Format the PFSA information for output
