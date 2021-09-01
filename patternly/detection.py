@@ -17,6 +17,7 @@ class AnomalyDetection:
         *,
         anomaly_sensitivity=1,
         n_clusters=1,
+        reduce_clusters=True,
         clustering_alg=None,
         quantize=True,
         quantize_type="complex",
@@ -28,6 +29,7 @@ class AnomalyDetection:
                 anomaly_sensitivity (float, optional): how many standard deviations above the mean llk to consider
                     an anomaly (Default = 1)
                 n_clusters (int, optional): number of clusters to use with KMeans (Default = 1)
+                reduce_clusters (bool, optional): whether to attempt to reduce the number of clusters
                 cluster_alg (sklearn.cluster, optional): clustering algorithm to use, if None then KMeans (Default = None)
                 quantize (bool, optional): whether to quantize the data (Default = True)
                 quantize_type (str, optional): type of quantization to use ("complex" or "simple") (Default = "complex")
@@ -44,6 +46,7 @@ class AnomalyDetection:
 
         self.anomaly_sensitivity = anomaly_sensitivity
         self.n_clusters = n_clusters
+        self.reduce_clusters = reduce_clusters
         self.clustering_alg = clustering_alg
         self.quantize = quantize
         self.quantize_type = quantize_type
@@ -87,7 +90,10 @@ class AnomalyDetection:
         self.__calculate_cluster_PFSAs()
         self.__reduce_clusters()
         self.__calculate_PFSA_stats()
+
         self.fitted = True
+        if self.verbose:
+            print("Model fit.")
 
         return self
 
@@ -355,28 +361,31 @@ class AnomalyDetection:
             generate similar PFSAs
         """
 
+        if self.n_clusters == 1 or not self.reduce_clusters:
+            return
+
+        if self.verbose:
+            print("Attempting to reduce clusters...")
+
         # generate representative sequences for each cluster PFSA
-        seq_len = 100000
+        seq_len = 1000000
         seqs_per_pfsa = 1
         cluster_seqs = [
             Prun(pfsafile=pfsa, data_len=seq_len, num_repeats=seqs_per_pfsa).run()[0]
             for pfsa in self.cluster_PFSA_files
         ]
 
-        # perform PCA on distance matrix from generated sequences and cluster resulting components
-        # to determine similar PFSAs
+        # cluster distance matrix resulting components to determine similar PFSAs
         dist_matrix = pd.DataFrame(Lsmash(data=cluster_seqs, data_type="symbolic", sae=False).run())
-        pca_components = PCA(n_components=2).fit(dist_matrix).components_
-        new_labels = DBSCAN(eps=0.5, min_samples=2).fit(pca_components.T).labels_
+        new_labels = DBSCAN(eps=0.1, min_samples=2, metric="precomputed").fit(dist_matrix).labels_
 
         # remove a cluster that contains less than 1% of the data
-        decrease_clusters = 0
-        for i in range(len(new_labels)):
-            if new_labels[i] == -1:
-                if self.cluster_counts[i] < (len(self.cluster_labels) // 100):
-                    decrease_clusters += 1
+        new_n_clusters = len(set(new_labels)) - (1 if -1 in new_labels else 0) + np.count_nonzero(new_labels == -1)
+        #  for i in range(len(new_labels)):
+            #  if new_labels[i] == -1:
+                #  if self.cluster_counts[i] < (len(self.cluster_labels) // 100):
+                    #  new_n_clusters -= 1
 
-        new_n_clusters = len(set(new_labels)) - decrease_clusters
         if new_n_clusters != self.n_clusters:
             self.n_clusters = new_n_clusters
             self.__calculate_cluster_labels()
@@ -461,38 +470,38 @@ class StreamingDetection(AnomalyDetection):
         """
 
         super().__init__(**kwargs)
-        self.window_size = window_size
-        self.window_overlap = window_overlap
+        self.window_size = int(window_size)
+        self.window_overlap = int(window_overlap)
 
 
     def fit(self, X, y=None):
-        X_split_streams = self.__split_streams(X)
-        super().fit(X_split_streams)
+        if (self.verbose):
+            print("Splitting data into individual streams...")
+        X_split_streams = self.split_streams(X, self.window_size, self.window_overlap)
+        return super().fit(X_split_streams)
 
 
     def predict(self, X=None):
         if X is None:
             return super().predict()
         else:
-            X_split_streams = self.__split_streams(X)
+            X_split_streams = self.split_streams(X, self.window_size, self.window_overlap)
             return super().predict(X_split_streams)
 
 
-    def __split_streams(self, X):
-        """ Split stream data into individual streams of length self.window_size
-            that overlap by self.overlap
+    @staticmethod
+    def split_streams(X, window_size, window_overlap):
+        """ Split stream data into individual streams using windows with specified size
+            and overlap
 
             Args:
                 X (pd.Series): data to be split into streams
         """
 
-        if (self.verbose):
-            print("Splitting data into individual streams...")
-
-        beg = lambda i: (self.window_size * i) - (self.window_overlap * i)
-        end = lambda i: beg(i) + self.window_size
-        size = X.shape[0] // (self.window_size - self.window_overlap)
+        def beg(i): return int((window_size * i) - (window_overlap * i))
+        def end(i): return int(beg(i) + window_size)
+        size = int(X.shape[0] // (window_size - window_overlap))
         return pd.concat(
             [X[beg(i):end(i)].reset_index(drop=True) for i in range(size)],
             axis=1
-        ).T
+        ).T.reset_index(drop=True)
