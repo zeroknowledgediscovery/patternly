@@ -4,6 +4,7 @@ import glob
 import uuid
 import shutil
 import atexit
+import numpy as np
 
 def os_remove(filename: str) -> int:
     try:
@@ -52,3 +53,57 @@ def RANDOM_NAME(clean: bool = True, path: str = "zed_temp") -> str:
         full = path + random_name
 
     return full
+
+class UnionFind:
+    def __init__(self, size):
+        if size <= 0:
+            raise ValueError("Size must be at least 1.")
+        self.size = size
+        self.n_components = size
+        self.roots = np.arange(size, dtype=np.int32)
+        self.component_sizes = np.full(shape=size, fill_value=1, dtype=np.int32)
+
+    def find(self, node):
+        root = node
+        while (root != self.roots[root]):
+            root = self.roots[root]
+        return root
+
+    def union(self, node_1, node_2, ranks=None):
+        root_1 = self.find(node_1)
+        root_2 = self.find(node_2)
+        if root_1 == root_2:
+            return
+
+        if ranks is not None and len(ranks) == self.size:
+            main_root = root_1 if ranks[root_1] > ranks[root_2] else root_2
+            sub_root = root_2 if ranks[root_1] > ranks[root_2] else root_1
+        else:
+            main_root = root_1 if self.component_sizes[root_1] > self.component_sizes[root_2] else root_2
+            sub_root = root_2 if self.component_sizes[root_1] > self.component_sizes[root_2] else root_1
+
+        self.roots[sub_root] = main_root
+        self.compress(node_1, main_root)
+        self.compress(node_2, main_root)
+        self.component_sizes[main_root] += self.component_sizes[sub_root]
+        self.n_components -= 1
+
+        return self
+
+    def compress(self, node, root=None):
+        if root is None:
+            root = self.find(node)
+
+        while (node != root):
+            next_node = self.roots[node]
+            self.roots[node] = root
+            node = next_node
+
+    def compress_all(self):
+        for i in range(self.size):
+            self.compress(i)
+        return self
+
+    def connected(self, node_1, node_2):
+        return self.find(node_1) == self.find(node_2)
+
