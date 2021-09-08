@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.10.0" />
+<meta name="generator" content="pdoc 0.9.2" />
 <title>patternly.detection API documentation</title>
 <meta name="description" content="" />
 <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
@@ -119,7 +119,10 @@ class AnomalyDetection:
         self.__calculate_cluster_PFSAs()
         self.__reduce_clusters()
         self.__calculate_PFSA_stats()
+
         self.fitted = True
+        if self.verbose:
+            print(&#34;Model fit.&#34;)
 
         return self
 
@@ -292,7 +295,6 @@ class AnomalyDetection:
             if not self.fitted:
                 self.quantizer = Quantizer(n_quantizations=1, epsilon=-1)
                 self.quantizer.fit(X)
-            self.transformed = self.quantizer.transform(X)
             return pd.concat(
                 [quantized for quantized in self.quantizer.transform(X)],
                 axis=1,
@@ -395,25 +397,23 @@ class AnomalyDetection:
             print(&#34;Attempting to reduce clusters...&#34;)
 
         # generate representative sequences for each cluster PFSA
-        seq_len = 100000
+        seq_len = 1000000
         seqs_per_pfsa = 1
         cluster_seqs = [
             Prun(pfsafile=pfsa, data_len=seq_len, num_repeats=seqs_per_pfsa).run()[0]
             for pfsa in self.cluster_PFSA_files
         ]
 
-        # perform PCA on distance matrix from generated sequences and cluster resulting components
-        # to determine similar PFSAs
+        # cluster distance matrix resulting components to determine similar PFSAs
         dist_matrix = pd.DataFrame(Lsmash(data=cluster_seqs, data_type=&#34;symbolic&#34;, sae=False).run())
-        pca_components = PCA(n_components=2).fit(dist_matrix).components_
-        new_labels = DBSCAN(eps=0.1, min_samples=2).fit(pca_components.T).labels_
+        new_labels = DBSCAN(eps=0.1, min_samples=2, metric=&#34;precomputed&#34;).fit(dist_matrix).labels_
 
         # remove a cluster that contains less than 1% of the data
-        new_n_clusters = len(set(new_labels))
-        for i in range(len(new_labels)):
-            if new_labels[i] == -1:
-                if self.cluster_counts[i] &lt; (len(self.cluster_labels) // 100):
-                    new_n_clusters -= 1
+        new_n_clusters = len(set(new_labels)) - (1 if -1 in new_labels else 0) + np.count_nonzero(new_labels == -1)
+        #  for i in range(len(new_labels)):
+            #  if new_labels[i] == -1:
+                #  if self.cluster_counts[i] &lt; (len(self.cluster_labels) // 100):
+                    #  new_n_clusters -= 1
 
         if new_n_clusters != self.n_clusters:
             self.n_clusters = new_n_clusters
@@ -507,7 +507,7 @@ class StreamingDetection(AnomalyDetection):
         if (self.verbose):
             print(&#34;Splitting data into individual streams...&#34;)
         X_split_streams = self.split_streams(X, self.window_size, self.window_overlap)
-        super().fit(X_split_streams)
+        return super().fit(X_split_streams)
 
 
     def predict(self, X=None):
@@ -527,10 +527,8 @@ class StreamingDetection(AnomalyDetection):
                 X (pd.Series): data to be split into streams
         &#34;&#34;&#34;
 
-        #  beg = lambda i: (self.window_size * i) - (self.window_overlap * i)
-        #  end = lambda i: beg(i) + self.window_size
-        def beg(i): return (window_size * i) - (window_overlap * i)
-        def end(i): return beg(i) + window_size
+        def beg(i): return int((window_size * i) - (window_overlap * i))
+        def end(i): return int(beg(i) + window_size)
         size = int(X.shape[0] // (window_size - window_overlap))
         return pd.concat(
             [X[beg(i):end(i)].reset_index(drop=True) for i in range(size)],
@@ -669,7 +667,10 @@ calling fit()</dd>
         self.__calculate_cluster_PFSAs()
         self.__reduce_clusters()
         self.__calculate_PFSA_stats()
+
         self.fitted = True
+        if self.verbose:
+            print(&#34;Model fit.&#34;)
 
         return self
 
@@ -842,7 +843,6 @@ calling fit()</dd>
             if not self.fitted:
                 self.quantizer = Quantizer(n_quantizations=1, epsilon=-1)
                 self.quantizer.fit(X)
-            self.transformed = self.quantizer.transform(X)
             return pd.concat(
                 [quantized for quantized in self.quantizer.transform(X)],
                 axis=1,
@@ -945,25 +945,23 @@ calling fit()</dd>
             print(&#34;Attempting to reduce clusters...&#34;)
 
         # generate representative sequences for each cluster PFSA
-        seq_len = 100000
+        seq_len = 1000000
         seqs_per_pfsa = 1
         cluster_seqs = [
             Prun(pfsafile=pfsa, data_len=seq_len, num_repeats=seqs_per_pfsa).run()[0]
             for pfsa in self.cluster_PFSA_files
         ]
 
-        # perform PCA on distance matrix from generated sequences and cluster resulting components
-        # to determine similar PFSAs
+        # cluster distance matrix resulting components to determine similar PFSAs
         dist_matrix = pd.DataFrame(Lsmash(data=cluster_seqs, data_type=&#34;symbolic&#34;, sae=False).run())
-        pca_components = PCA(n_components=2).fit(dist_matrix).components_
-        new_labels = DBSCAN(eps=0.1, min_samples=2).fit(pca_components.T).labels_
+        new_labels = DBSCAN(eps=0.1, min_samples=2, metric=&#34;precomputed&#34;).fit(dist_matrix).labels_
 
         # remove a cluster that contains less than 1% of the data
-        new_n_clusters = len(set(new_labels))
-        for i in range(len(new_labels)):
-            if new_labels[i] == -1:
-                if self.cluster_counts[i] &lt; (len(self.cluster_labels) // 100):
-                    new_n_clusters -= 1
+        new_n_clusters = len(set(new_labels)) - (1 if -1 in new_labels else 0) + np.count_nonzero(new_labels == -1)
+        #  for i in range(len(new_labels)):
+            #  if new_labels[i] == -1:
+                #  if self.cluster_counts[i] &lt; (len(self.cluster_labels) // 100):
+                    #  new_n_clusters -= 1
 
         if new_n_clusters != self.n_clusters:
             self.n_clusters = new_n_clusters
@@ -1140,7 +1138,10 @@ def load_model(path=&#34;patternly_model.pickle&#34;):
     self.__calculate_cluster_PFSAs()
     self.__reduce_clusters()
     self.__calculate_PFSA_stats()
+
     self.fitted = True
+    if self.verbose:
+        print(&#34;Model fit.&#34;)
 
     return self</code></pre>
 </details>
@@ -1347,7 +1348,7 @@ predicts on original data (Default = None)</dd>
         if (self.verbose):
             print(&#34;Splitting data into individual streams...&#34;)
         X_split_streams = self.split_streams(X, self.window_size, self.window_overlap)
-        super().fit(X_split_streams)
+        return super().fit(X_split_streams)
 
 
     def predict(self, X=None):
@@ -1367,10 +1368,8 @@ predicts on original data (Default = None)</dd>
                 X (pd.Series): data to be split into streams
         &#34;&#34;&#34;
 
-        #  beg = lambda i: (self.window_size * i) - (self.window_overlap * i)
-        #  end = lambda i: beg(i) + self.window_size
-        def beg(i): return (window_size * i) - (window_overlap * i)
-        def end(i): return beg(i) + window_size
+        def beg(i): return int((window_size * i) - (window_overlap * i))
+        def end(i): return int(beg(i) + window_size)
         size = int(X.shape[0] // (window_size - window_overlap))
         return pd.concat(
             [X[beg(i):end(i)].reset_index(drop=True) for i in range(size)],
@@ -1407,10 +1406,8 @@ def split_streams(X, window_size, window_overlap):
             X (pd.Series): data to be split into streams
     &#34;&#34;&#34;
 
-    #  beg = lambda i: (self.window_size * i) - (self.window_overlap * i)
-    #  end = lambda i: beg(i) + self.window_size
-    def beg(i): return (window_size * i) - (window_overlap * i)
-    def end(i): return beg(i) + window_size
+    def beg(i): return int((window_size * i) - (window_overlap * i))
+    def end(i): return int(beg(i) + window_size)
     size = int(X.shape[0] // (window_size - window_overlap))
     return pd.concat(
         [X[beg(i):end(i)].reset_index(drop=True) for i in range(size)],
@@ -1474,7 +1471,7 @@ def split_streams(X, window_size, window_overlap):
 </main>
 <footer id="footer">
 Author: Drew Vlasnik and Ishanu Chattopadhyay <a href="https://zed.uchicago.edu"> Zero Knowledge Discovery, University of Chicago</a>. Email: ishanu@uchicago.edu
-<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.10.0</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.9.2</a>.</p>
 </footer>
 </body>
 </html>
