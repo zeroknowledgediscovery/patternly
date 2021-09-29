@@ -4,6 +4,7 @@ import glob
 import uuid
 import shutil
 import atexit
+from collections import deque, defaultdict
 import numpy as np
 
 def os_remove(filename: str) -> int:
@@ -106,4 +107,56 @@ class UnionFind:
 
     def connected(self, node_1, node_2):
         return self.find(node_1) == self.find(node_2)
+
+class DirectedGraph:
+    def __init__(self, size):
+        self.size = size
+        self.graph = defaultdict(set)
+
+    def from_matrix(self, matrix, threshold=0):
+        if len(matrix) != len(matrix[0]):
+            raise ValueError("Matrix must be square.")
+
+        for i in range(len(matrix)):
+            for j in range(len(matrix[i])):
+                if matrix[i][j] >= threshold:
+                    self.graph[i].add(j)
+
+    def add(self, node_1, node_2):
+        self.graph[node_1].add(node_2)
+
+    def find_scc(self):
+        """ Use Tarjan's algorithm to find strongly connected components """
+
+        self.ids = [-1 for _ in range(self.size)]
+        self.low_links = [-1 for _ in range(self.size)]
+        self.on_stack = [False for _ in range(self.size)]
+        self.stack = deque()
+        self.curr_id = 0
+        self.num_scc = 0
+        for node in range(self.size):
+            if self.ids[node] == -1:
+                self.dfs(node)
+
+        return self.num_scc
+
+    def dfs(self, root_node):
+        self.stack.append(root_node)
+        self.on_stack[root_node] = True
+        self.ids[root_node] = self.curr_id
+        self.low_links[root_node] = self.curr_id
+        self.curr_id += 1
+
+        for node in self.graph[root_node]:
+            if self.ids[node] == -1:
+                self.dfs(node)
+                self.low_links[root_node] = min(self.low_links[root_node], self.low_links[node])
+            elif self.on_stack[node]:
+                self.low_links[root_node] = min(self.low_links[root_node], self.ids[node])
+
+        if self.ids[root_node] == self.low_links[root_node]:
+            while len(self.stack) > 0:
+                self.on_stack[self.stack.pop()] = False
+            self.num_scc += 1
+
 
