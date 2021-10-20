@@ -1,3 +1,6 @@
+import os
+import subprocess as sp
+
 import dill
 import numpy as np
 import pandas as pd
@@ -128,7 +131,9 @@ class AnomalyDetection:
 
         cluster_llks = np.empty(shape=(self.n_clusters, num_predictions), dtype=np.float32)
         for i in range(self.n_clusters):
-            cluster_llks[i] = np.asarray(Llk(data=data, pfsafile=self.cluster_PFSA_files[i]).run(), dtype=np.float32)
+            # cluster_llks[i] = np.asarray(Llk(data=data, pfsafile=self.cluster_PFSA_files[i]).run(), dtype=np.float32)
+            llks = Llk(data=data, pfsafile=self.cluster_PFSA_files[i]).run()
+            cluster_llks[i] = np.asarray(llks, dtype=np.float32)
 
         # consider to be anomaly if all llks above specified upper bound (X standard deviations above the mean)
         upper_bounds = self.PFSA_llk_means + (self.PFSA_llk_stds * self.anomaly_sensitivity)
@@ -158,6 +163,7 @@ class AnomalyDetection:
             "user_params": {
                 "anomaly_sensitivity": self.anomaly_sensitivity,
                 "n_clusters": self.n_clusters,
+                "reduce_clusters": self.reduce_clusters,
                 "clustering_alg": self.clustering_alg,
                 "quantize": self.quantize,
                 "quantize_type": self.quantize_type,
@@ -168,9 +174,10 @@ class AnomalyDetection:
                 "quantizer_parameters": None if self.quantizer is None else self.quantizer.parameters ,
                 "quantizer_feature_order": None if self.quantizer is None else self.quantizer._feature_order,
                 "cluster_labels": self.cluster_labels,
+                "cluster_counts": self.cluster_counts,
                 "cluster_PFSA_info": self.cluster_PFSA_info,
-                "PFSA_llk_means": self.PFSA_llk_means,
-                "PFSA_llk_stds": self.PFSA_llk_stds
+                "PFSA_llk_means": self.PFSA_llk_means.tolist(),
+                "PFSA_llk_stds": self.PFSA_llk_stds.tolist()
             }
         }
 
@@ -192,15 +199,23 @@ class AnomalyDetection:
         with open(path, "rb") as f:
             metadata = dill.load(f)
 
-        model = metadata["modeltype"](**metadata["user_params"])
-        if model.quantize:
+        model = None
+        if metadata["modeltype"] is AnomalyDetection:
+            model = AnomalyDetection(**metadata["user_params"])
+        else:
+            model = StreamingDetection(**metadata["user_params"])
+
+        if model.quantize and model.quantize_type == "complex":
             model.quantizer = Quantizer(n_quantizations=1, eps=-1)
             model.quantizer.parameters = metadata["fitted_params"]["quantizer_parameters"]
             model.quantizer._feature_order = metadata["fitted_params"]["quantizer_feature_order"]
         model.cluster_labels = metadata["fitted_params"]["cluster_labels"]
+        model.cluster_counts = metadata["fitted_params"]["cluster_counts"]
         model.cluster_PFSA_info = metadata["fitted_params"]["cluster_PFSA_info"]
-        model.PFSA_llk_means = metadata["fitted_params"]["PFSA_llk_means"]
-        model.PFSA_llk_stds = metadata["fitted_params"]["PFSA_llk_stds"]
+        model.PFSA_llk_means = np.asarray(metadata["fitted_params"]["PFSA_llk_means"])
+        model.PFSA_llk_stds = np.asarray(metadata["fitted_params"]["PFSA_llk_stds"])
+        # print(model.PFSA_llk_means)
+        # print(model.PFSA_llk_stds)
 
         # write PFSA files
         model.cluster_PFSA_files = []
@@ -208,7 +223,8 @@ class AnomalyDetection:
             model.cluster_PFSA_files.append(RANDOM_NAME(path=model.temp_dir))
             with open(model.cluster_PFSA_files[i], "w") as f:
                 f.write(f"{model.__format_PFSA_info(model.cluster_PFSA_info[i])}")
-        model.generate_PFSA_pngs()
+                # print(model.__format_PFSA_info(model.cluster_PFSA_info[i]))
+        # model.generate_PFSA_pngs()
 
         model.fitted = True
 
@@ -232,6 +248,7 @@ class AnomalyDetection:
             Returns:
                 list[str]: list of file paths to png files
         """
+
         self.cluster_PFSA_pngs = []
         for i in range(self.n_clusters):
             self.cluster_PFSA_pngs.append(RANDOM_NAME(path=self.temp_dir))
@@ -301,7 +318,7 @@ class AnomalyDetection:
             print("Clustering distance matrix...")
 
         if self.n_clusters == 1:
-            self.cluster_labels = np.zeros(shape=(self.dist_matrix.shape[0]))
+            self.cluster_labels = [0 for i in range(self.dist_matrix.shape[0])]
 
         cluster_labels = []
         if self.clustering_alg is None:
@@ -476,17 +493,17 @@ class AnomalyDetection:
 
         pitilde_vals = indent
         for row in PFSA_info["%PITILDE"]:
-            for val in row:
-                suffix = " " if str(val) != str(row[-1]) else f" \n{indent}"
+            for i, val in enumerate(row):
+                suffix = " " if (i+1) < len(row) else f" \n{indent}"
                 pitilde_vals += (f"{val}{suffix}")
         pitilde_vals = pitilde_vals[:-len(indent)] if indent_level > 0 else pitilde_vals
 
         connx_vals = indent
         for row in PFSA_info["%CONNX"]:
-            for val in row:
-                suffix = " " if str(val) != str(row[-1]) else f" \n{indent}"
+            for i, val in enumerate(row):
+                suffix = " " if (i+1) < len(row) else f" \n{indent}"
                 connx_vals += (f"{val}{suffix}")
-        connx_vals = pitilde_vals[:-len(indent)] if indent_level > 0 else connx_vals
+        connx_vals = connx_vals[:-len(indent)] if indent_level > 0 else connx_vals
 
         return (
             f"{indent}%ANN_ERR: {PFSA_info['%ANN_ERR']}\n"
@@ -531,6 +548,19 @@ class StreamingDetection(AnomalyDetection):
             X_split_streams = self.split_streams(X, self.window_size, self.window_overlap)
             return super().predict(X_split_streams)
 
+    
+    def save_model(self, path="patternly_model.dill"):
+        super().save_model(path=path)
+
+        with open(path, "rb") as f:
+            metadata = dill.load(f)
+
+        metadata["user_params"]["window_size"] = self.window_size
+        metadata["user_params"]["window_overlap"] = self.window_overlap
+
+        with open(path, "wb") as f:
+            dill.dump(metadata, f)
+
 
     @staticmethod
     def split_streams(X, window_size, window_overlap):
@@ -550,9 +580,9 @@ class StreamingDetection(AnomalyDetection):
         ).T.reset_index(drop=True)
 
 
-    def visualize(self, num_plots, predictions):
-        """ Visualize active clusters and anomalies in respect to the original data """
-        pass
+    # def visualize(self, num_plots, predictions):
+        # """ Visualize active clusters and anomalies in respect to the original data """
+        # pass
         # TODO: abstract and generalize for common use cases
 
         # import matplotlib.pyplot as plt
@@ -609,3 +639,79 @@ class StreamingDetection(AnomalyDetection):
 
         # plt.tight_layout(pad=2)
         # plt.show()
+
+# class AnomalyDetectionBin(AnomalyDetection):
+#     def __init__(self, **kwargs):
+#         super().__init__(**kwargs)
+
+#     @staticmethod
+#     def llk(data, pfsa_file, *, clean=True, data_file=None):
+#         data_file = RANDOM_NAME(clean) if data_file is None else data_file
+#         data.to_csv(data_file, sep=" ", index=False, header=False)
+#         llk_binary = os.path.abspath("./bin/llk")
+#         llpos = llk_binary + " -s " + data_file + " -f " + pfsa_file
+
+#         try:
+#             df_toreturn = pd.DataFrame(
+#                 sp.check_output(llpos, shell=True, stderr=sp.DEVNULL).split()
+#             ).astype(float)
+
+#         except sp.CalledProcessError as e:
+#             print(f"Failed: {e}")
+#         #     if clean:
+#         #         os_remove(data_file)
+#         #     # raise Binary_crashed()
+#         # if clean:
+#         #     os_remove(data_file)
+
+#         df_toreturn.index = data.index
+#         return df_toreturn
+
+#     def predict(self, X=None, *, clean=True):
+#         """ Predict whether a time series sequence is anomalous
+
+#         Args:
+#             X (pd.DataFrame or pd.Series, optional): time series data to find anomalies, if None then
+#                 predicts on original data (Default = None)
+#             clean (bool, optional): whether to remove temp files (Default = True)
+
+#         Returns:
+#             bool or list[bool]: True if time series is an anomaly, False otherwise output shape depends on input
+#         """
+
+#         if not self.fitted:
+#             raise ValueError("Model has not been fit yet")
+
+#         data = None
+#         num_predictions = 0
+#         # commonly want to find anomalies in original data
+#         if X is None:
+#             # occurs when model is loaded from file
+#             if self.quantized_data is None:
+#                 raise ValueError("Original data not found. Pass data to predict().")
+#             data = self.quantized_data.drop(columns=["cluster"], axis=1)
+#             num_predictions = self.quantized_data.shape[0]
+#         else:
+#             data = self.__quantize(X)
+#             num_predictions = 1 if type(X) is pd.Series else data.shape[0]
+
+#         cluster_llks = np.empty(shape=(self.n_clusters, num_predictions), dtype=np.float32)
+#         for i in range(self.n_clusters):
+#             # print(data)
+#             # print(i, self.cluster_PFSA_files[i])
+#             # print(Llk(data=data, pfsafile=self.cluster_PFSA_files[i]).run())
+#             # print("LLK RAN")
+#             # cluster_llks[i] = np.asarray(Llk(data=data, pfsafile=self.cluster_PFSA_files[i]).run(), dtype=np.float32)
+#             cluster_llks[i] = np.asarray(llk(data, self.cluster_PFSA_files[i]), dtype=np.float32)
+
+#         # consider to be anomaly if all llks above specified upper bound (X standard deviations above the mean)
+#         upper_bounds = self.PFSA_llk_means + (self.PFSA_llk_stds * self.anomaly_sensitivity)
+#         predictions = np.all(cluster_llks.T > upper_bounds, axis=1)
+
+#         self.cluster_llks = cluster_llks
+#         self.closest_match = np.argmin(cluster_llks, axis=0)
+
+#         if len(predictions) == 1:
+#             predictions = predictions[0]
+
+#         return predictions
