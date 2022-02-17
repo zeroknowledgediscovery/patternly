@@ -1,0 +1,407 @@
+\usepackage{etex}
+\usepackage{amssymb,amsfonts,amsmath,amsthm,mathrsfs,dsfont,mathtools}
+\usepackage{graphicx,subfig}
+\usepackage[linesnumbered,ruled,vlined,noend]{algorithm2e}
+\usepackage[usenames,x11names,dvipsnames, svgnames]{xcolor}
+\definecolor{MidLavender}{rgb}{.77,.77,.89}
+\definecolor{darkgreen}{RGB}{50, 150, 50}
+\definecolor{MidLavender}{rgb}{.77,.77,.89}
+\definecolor{oneEdge}{rgb}{.37, .52, .54}
+\definecolor{zeroEdge}{rgb}{.93, .45, .43}
+\definecolor{node}{rgb}{.87, .87, .87}
+\usepackage{colortbl}
+\usepackage{tabularx} % To have itemize environment in table 
+
+\usepackage{stmaryrd} % for command /nrm
+
+\usepackage{hyperref}
+\hypersetup{
+colorlinks=true,
+linkcolor=black,
+citecolor=Blue3,
+% filecolor=black,
+urlcolor=DodgerBlue4,
+% breaklinks=true
+}
+
+%   -----------------------------labeled item------------------------------
+\makeatletter
+\newcommand{\labitem}[2]{
+  \def\@itemlabel{{#1}}
+\item
+  \def\@currentlabel{#1}\label{#2}
+}
+\makeatother
+
+% -------------------------------new theorems----------------------------
+\newtheorem{thm}{Theorem}
+\newtheorem{cor}{Corollary}
+\newtheorem{lem}{Lemma}
+\newtheorem{prop}{Proposition}
+
+\theoremstyle{definition}
+\newtheorem{defn}{Definition}
+\newtheorem{notn}{Notation}
+
+\theoremstyle{remark}
+\newtheorem{rem}{\textbf{Remark}}
+\newtheorem{exmpl}{\textbf{Example}}
+\newtheorem{fact}{\textbf{Fact}}
+
+% ----------------------------new commands-------------------------------
+\newcommand{\R}{\mathbb{R}} % Set of real numbers
+\newcommand{\F}[1][]{\mathcal{F}_{#1}}
+\newcommand{\SR}{\mathcal{S}} % Semiring of sets
+\newcommand{\RR}{\mathcal{R}} % Ring of sets
+\newcommand{\N}{\mathbb{N}} % Set of natural numbers (0 included)
+
+
+\newcommand{\Pp}[1][n]{\mathscr{P}^+_{#1}}
+\newcommand{\Pitilde}{\widetilde{\Pi}}
+\newcommand{\pitilde}{\widetilde{\pi}}
+\newcommand{\entropy}[1]{\boldsymbol{h}\left ( #1 \right )}
+\newcommand{\scalarProd}{\dot{\sim}}
+
+% ---------------------------delimiters----------------------------------
+\newcommand{\set}[1]{\left\{ #1 \right\}}
+\newcommand{\paren}[1]{\left( #1 \right)}
+\newcommand{\bracket}[1]{\left[ #1 \right]}
+\newcommand{\norm}[1]{\left\Vert #1 \right\Vert}
+\newcommand{\abs}[1]{\left| #1 \right|}
+\newcommand{\nrm}[1]{\left\llbracket{#1}\right\rrbracket}
+\newcommand{\parenBar}[2]{\paren{#1\,{\left\Vert\,#2\right.}}}
+\newcommand{\parenBarl}[2]{\paren{\left.#1\,\right\Vert\,#2}}
+\DeclarePairedDelimiter{\ceil}{\lceil}{\rceil}
+\DeclarePairedDelimiter{\floor}{\lfloor}{\rfloor}
+\renewcommand{\ceil}[1]{\left\lceil{#1}\right\rceil}
+\renewcommand{\floor}[1]{\left\lfloor{#1}\right\rfloor}
+
+% --------------------------Editing-------------------------------------
+\newcommand{\ie}{\textit{i.e.~}}
+\newcommand{\addcitation}{\textcolor{black!50!red}{\textbf{ADD CITATION}}}
+\newcommand{\subtochange}[1]{{\color{black!50!green}{#1}}}
+\newcommand{\tobecompleted}{{\color{black!50!red}TO BE COMPLETED.}}
+
+\newcommand{\algo}{\textsf{GenESeSS}}
+\newcommand{\xalgo}{\textsf{XGenESeSS}}
+
+\newcommand{\pIn}{\mathscr{P}_{\textrm{in}}}
+\newcommand{\pOut}{\mathscr{P}_{\textrm{out}}}
+\newcommand{\aIn}[1][\Sigma]{#1_{\textrm{in}}}
+\newcommand{\aOut}[1][\Sigma]{#1_{\textrm{out}}}
+\newcommand{\xin}[1]{#1_{\textrm{in}}}
+
+% ---------------------------Column type--------------------------------
+\newcolumntype{L}[1]{>{\rule{0pt}{2ex}\raggedright\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+\newcolumntype{C}[1]{>{\rule{0pt}{2ex}\centering\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+\newcolumntype{R}[1]{>{\rule{0pt}{2ex}\raggedleft\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+
+%------------font------------------------
+\usepackage{txfonts}
+%\usepackage{ccfonts}
+%%% save defaults
+%\renewcommand{\rmdefault}{phv} % Arial
+%\renewcommand{\sfdefault}{phv} % Arial
+\edef\keptrmdefault{\rmdefault}
+\edef\keptsfdefault{\sfdefault}
+\edef\keptttdefault{\ttdefault}
+
+% \usepackage{kerkis}
+\usepackage[OT1]{fontenc}
+\usepackage{concmath}
+% \usepackage[T1]{eulervm} 
+% \usepackage[OT1]{fontenc}
+%%% restore defaults
+\edef\rmdefault{\keptrmdefault}
+\edef\sfdefault{\keptsfdefault}
+\edef\ttdefault{\keptttdefault}
+% --------------------------------------tikz---------------------------------
+\usepackage{tikz}
+\usetikzlibrary{
+  arrows,
+  positioning,
+  fadings,
+  decorations.markings,
+  automata,
+  chains,
+  calc,
+  shadows,
+  shadows.blur,
+  patterns
+}
+\usetikzlibrary{external}
+\tikzexternalize[prefix=./Figures/External/]
+\usepackage{pgfplots}
+\usepgfplotslibrary{groupplots}
+\usepackage{pgfplotstable}
+\usepackage{filecontents}
+
+
+\tikzstyle{state} = [circle, fill=black!10, inner sep=1, minimum size=15]
+\tikzstyle{stateLight} = [circle, fill=black!5, text=black!40, inner sep=3]
+
+\tikzset{
+  in place/.style={
+    auto=false,
+    fill=white,
+    rounded corners,
+    inner sep=0pt,
+    fill opacity=0.8
+  }
+}
+
+\tikzset{
+  mix/.style n args={3}{
+    postaction={
+      decorate,
+      decoration={
+        markings,
+        mark=at position \pgfdecoratedpathlength-0.1pt with {
+          \arrow[#3,line width=#1]{>}; 
+        },
+        mark=between positions 0 and \pgfdecoratedpathlength-2pt step 0.5pt with {
+          \pgfmathsetmacro\myval{multiply(
+            divide(\pgfkeysvalueof{/pgf/decoration/mark info/distance from start}, \pgfdecoratedpathlength),100)};
+          \pgfsetfillcolor{#3!\myval!#2};
+          \pgfpathcircle{\pgfpointorigin}{#1};
+          \pgfusepath{fill};
+        }
+      }
+    }
+  }
+}
+
+\tikzset{
+  edge0/.style={
+    decoration={
+      markings,
+      mark=at position #1 with {\arrow{>}}
+    },
+    postaction={decorate},
+    draw=zeroEdge,
+    text=zeroEdge,
+    very thick
+  }
+}
+\tikzset{
+  edge1/.style={
+    decoration={
+      markings,
+      mark=at position #1 with {\arrow{>}}
+    },
+    postaction={decorate},
+    draw=oneEdge,
+    text=oneEdge,
+    very thick
+  }
+}
+\tikzset{
+  edge2/.style={
+    decoration={
+      markings,
+      mark=at position #1 with {\arrow{>}}
+    },
+    postaction={decorate},
+    draw=twoEdge,
+    text=twoEdge,
+    very thick
+  }
+}
+\tikzset{
+  edge3/.style={
+    decoration={
+      markings,
+      mark=at position #1 with {\arrow{>}}
+    },
+    postaction={decorate},
+    draw=threeEdge,
+    text=threeEdge,
+    very thick
+  }
+}
+
+\def\lighter{20}
+\tikzset{
+  edge0Light/.style={
+    decoration={
+      markings,
+      mark=at position #1 with {\arrow{>}}
+    },
+    postaction={decorate},
+    draw=zeroEdge!\lighter,
+    text=zeroEdge!\lighter,
+    very thick
+  }
+}
+\tikzset{
+  edge1Light/.style={
+    decoration={
+      markings,
+      mark=at position #1 with {\arrow{>}}
+    },
+    postaction={decorate},
+    draw=oneEdge!\lighter,
+    text=oneEdge!\lighter,
+    very thick
+  }
+}
+\tikzset{
+  edge2Light/.style={
+    decoration={
+      markings,
+      mark=at position #1 with {\arrow{>}}
+    },
+    postaction={decorate},
+    draw=twoEdge!\lighter,
+    text=twoEdge!\lighter,
+    very thick
+  }
+}
+\tikzset{
+  edge3Light/.style={
+    decoration={
+      markings,
+      mark=at position #1 with {\arrow{>}}
+    },
+    postaction={decorate},
+    draw=threeEdge!\lighter,
+    text=threeEdge!\lighter,
+    very thick
+  }
+}
+
+\newcommand{\FWN}[5]{
+  \begin{tikzpicture}[scale=#5, every node/.style={transform shape}]
+    \def\angle{#3}
+    \def\looseness{#4}
+    \def\middle{180}
+    \node[state] (q) at (0, 0) {$#2$};
+    \path[edge0=.999] (q) to[out=\middle+\angle, in=\middle-\angle, looseness=\looseness] node[left] {$0\left(#1\right)$} (q);
+    \pgfmathparse{1.-#1}
+    \let\a\pgfmathresult
+    \path[edge1=.999] (q) to[out=\middle+180+\angle, in=\middle+180-\angle, looseness=\looseness] node[right] {$1\left(\pgfmathprintnumber[skip 0.,fixed]{\a}\right)$} (q);
+  \end{tikzpicture}
+}
+\newcommand{\MTwo}[7]{
+  \begin{tikzpicture}[scale=#5, every node/.style={transform shape}]
+    \def\d{#6}
+    \def\angle{45}
+    \def\looseness{#7}
+    \node[state] (q_0) at (-\d, 0) {#3};
+    \node[state] (q_1) at (\d, 0) {#4};
+    \pgfmathparse{1.-#1}
+    \let\a\pgfmathresult
+    \path[edge0=.999] (q_0) to [out=180-\angle, in=180+\angle, looseness=\looseness] node[pos=.85, below] {$0\left(#1\right)$} (q_0);
+    \path[edge1=.999] (q_0) to [out=-\angle, in=180+\angle] node[below] {$1\left(\pgfmathprintnumber[skip 0.,fixed]{\a}\right)$} (q_1);
+    \pgfmathparse{1.-#2}
+    \let\b\pgfmathresult
+    \path[edge0=.999] (q_1) to [out=180-\angle, in=\angle] node[above] {$0\left(#2\right)$} (q_0);
+    \path[edge1=.999] (q_1) to [out=-\angle, in=\angle, looseness=\looseness] node[pos=.85, above] {$1\left(\pgfmathprintnumber[skip 0.,fixed]{\b}\right)$} (q_1);
+  \end{tikzpicture}
+}
+
+\newcommand{\STwo}[7]{
+  \begin{tikzpicture}[scale=#5, every node/.style={transform shape}]
+    \def\d{#6}
+    \def\angle{45}
+    \def\looseness{#7}
+    \node[state] (q_0) at (-\d, 0) {$#3$};
+    \node[state] (q_1) at (\d, 0) {$#4$};
+    \pgfmathparse{1.-#1}
+    \let\a\pgfmathresult
+    \path[edge0=.999] (q_0) to [out=180-\angle, in=180+\angle, looseness=\looseness] node[pos=.85, below] {$0\left(#1\right)$} (q_0);
+    \path[edge1=.999] (q_0) to [out=-\angle, in=180+\angle] node[below] {$1\left(\pgfmathprintnumber[skip 0.,fixed]{\a}\right)$} (q_1);
+    \pgfmathparse{1.-#2}
+    \let\b\pgfmathresult
+    \path[edge0=.999] (q_1) to [out=-\angle, in=\angle, looseness=\looseness] node[pos=.85, above] {$0\left(#2\right)$} (q_1);
+    \path[edge1=.999] (q_1) to [out=180-\angle, in=\angle] node[above] {$1\left(\pgfmathprintnumber[skip 0.,fixed]{\b}\right)$} (q_0);
+    
+  \end{tikzpicture}
+}
+\newcommand{\STwoEllipse}[7]{
+  \begin{tikzpicture}[scale=#5, every node/.style={transform shape}]
+    \def\d{#6}
+    \def\angle{45}
+    \def\looseness{#7}
+    \node[state, ellipse, inner xsep=0pt] (q_0) at (-\d, 0) {$#3$};
+    \node[state, ellipse, inner xsep=0pt] (q_1) at (\d, 0) {$#4$};
+    \pgfmathparse{1.-#1}
+    \let\a\pgfmathresult
+    \path[edge0=.999] (q_0) to [out=180-\angle, in=180+\angle, looseness=\looseness] node[pos=.85, below] {$0\left(#1\right)$} (q_0);
+    \path[edge1=.999] (q_0) to [out=-\angle, in=180+\angle] node[below] {$1\left(\pgfmathprintnumber[skip 0.,fixed]{\a}\right)$} (q_1);
+    \pgfmathparse{1.-#2}
+    \let\b\pgfmathresult
+    \path[edge0=.999] (q_1) to [out=-\angle, in=\angle, looseness=\looseness] node[pos=.85, above] {$0\left(#2\right)$} (q_1);
+    \path[edge1=.999] (q_1) to [out=180-\angle, in=\angle] node[above] {$1\left(\pgfmathprintnumber[skip 0.,fixed]{\b}\right)$} (q_0);
+    
+  \end{tikzpicture}
+}
+\newcommand{\STwoInner}[4]{
+  \begin{tikzpicture}
+    \def\d{1.6}
+    \def\angle{45}
+    \node[state] (q_0) at (-\d, 0) {$#3$};
+    \node[state] (q_1) at (\d, 0) {$#4$};
+    \pgfmathparse{1.-#1}
+    \let\a\pgfmathresult
+    \path[edge0=.999] (q_0) to [out=180-\angle, in=180+\angle, looseness=14] node[right] {$0\left(#1\right)$} (q_0);
+    \path[edge1=.999] (q_0) to [out=-\angle, in=180+\angle] node[below] {$1\left(\pgfmathprintnumber[skip 0.,fixed]{\a}\right)$} (q_1);
+    \pgfmathparse{1.-#2}
+    \let\b\pgfmathresult
+    \path[edge0=.999] (q_1) to [out=-\angle, in=\angle, looseness=14] node[left] {$0\left(#2\right)$} (q_1);
+    \path[edge1=.999] (q_1) to [out=180-\angle, in=\angle] node[above] {$1\left(\pgfmathprintnumber[skip 0.,fixed]{\b}\right)$} (q_0);
+    
+  \end{tikzpicture}
+}
+
+% ----------------------------groupplot ylabel------------------------------
+% --------------------------------------------------------------------------
+% --------------------------------------------------------------------------
+\makeatletter
+\pgfplotsset{
+  groupplot xlabel/.initial={},
+  every groupplot x label/.style={
+    at={($({\pgfplots@group@name\space c1r\pgfplots@group@rows.west}|-{\pgfplots@group@name\space c1r\pgfplots@group@rows.outer south})!0.5!({\pgfplots@group@name\space c\pgfplots@group@columns r\pgfplots@group@rows.east}|-{\pgfplots@group@name\space c\pgfplots@group@columns r\pgfplots@group@rows.outer south})$)},
+    anchor=north,
+  },
+  groupplot ylabel/.initial={},
+  every groupplot y label/.style={
+    rotate=90,
+    at={($({\pgfplots@group@name\space c1r1.north}-|{\pgfplots@group@name\space c1r1.outer
+        west})!0.5!({\pgfplots@group@name\space c1r\pgfplots@group@rows.south}-|{\pgfplots@group@name\space c1r\pgfplots@group@rows.outer west})$)},
+    anchor=south
+  },
+  execute at end groupplot/.code={%
+    \node [/pgfplots/every groupplot x label]
+    {\pgfkeysvalueof{/pgfplots/groupplot xlabel}};  
+    \node [/pgfplots/every groupplot y label] 
+    {\pgfkeysvalueof{/pgfplots/groupplot ylabel}};  
+  }
+}
+
+\def\endpgfplots@environment@groupplot{%
+  \endpgfplots@environment@opt%
+  \pgfkeys{/pgfplots/execute at end groupplot}%
+  \endgroup%
+}
+\makeatother 
+% --------------------------------------------------------------------------
+% --------------------------------------------------------------------------
+% --------------------------------------------------------------------------
+%==========================================================
+
+%% ## Equation Space Control---------------------------
+\def\EQSP{5pt}
+\newcommand{\mltlne}[2][\EQSP]{\begingroup\setlength\abovedisplayskip{#1}\setlength\belowdisplayskip{#1}\begin{equation}\begin{multlined} #2 \end{multlined}\end{equation}\endgroup\noindent}
+\newcommand{\cgather}[2][\EQSP]{\begingroup\setlength\abovedisplayskip{#1}\setlength\belowdisplayskip{#1}\begin{gather} #2 \end{gather}\endgroup\noindent}
+\newcommand{\cgathers}[2][\EQSP]{\begingroup\setlength\abovedisplayskip{#1}\setlength\belowdisplayskip{#1}\begin{gather*} #2 \end{gather*}\endgroup\noindent}
+\newcommand{\calign}[2][\EQSP]{\begingroup\setlength\abovedisplayskip{#1}\setlength\belowdisplayskip{#1}\begin{align} #2 \end{align}\endgroup\noindent}
+\newcommand{\caligns}[2][\EQSP]{\begingroup\setlength\abovedisplayskip{#1}\setlength\belowdisplayskip{#1}\begin{align*} #2 \end{align*}\endgroup\noindent}
+\newcommand{\mnp}[2]{\begin{minipage}{#1}#2\end{minipage}} 
+\newif\ifdraftQ
+\newif\iftikzX
+\newcounter{Dcounter}
+\setcounter{Dcounter}{1}
+\newcommand{\DQS}[1]{\ifdraftQ
+{\marginpar{\hspace{-15pt}\tikzexternaldisable \tikz{\node[rounded corners=5pt,draw=none,thick,fill=black!10,font=\sffamily\fontsize{7}{8}\selectfont] {\mnp{.37in} {\color{Red3}\raggedright  \#\theDcounter.~#1}}; }}}\stepcounter{Dcounter}\xspace
+\fi}

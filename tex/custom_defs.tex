@@ -1,0 +1,41 @@
+\newif\iftikzX
+\tikzXtrue
+% \tikzXfalse
+\def\jobnameX{zero}
+\newif\ifFIGS
+\FIGSfalse  
+\FIGStrue
+
+\def\authora{Drew~Vlasnik\xspace}
+%\def\authorb{Victor~Rotaru\xspace}
+\def\authorc{Ishanu~Chattopadhyay}
+
+\def\addressa{Department of Medicine, University of Chicago}
+\def\addressb{Committee on Genetics, Genomics \& Systems Biology, University of Chicago}
+\def\addressc{Committee on Quantitative Methods in Social, Behavioral, and Health Sciences, University of Chicago}
+\def\addressd{Department of Computer Science, University of Chicago}
+
+
+\def\TITLE{\textbf{patternly}: Anomaly Discovery in Dynamical Systems}
+
+\def\ALGONAME{\textsf{SLD}\xspace}
+
+%=======================Algorithms=========================
+%====================all lower case========================
+\newcommand{\lsmash}{\textrm{LikelihoodDistance}\xspace}
+\newcommand{\gen}{\textrm{genESeSS}\xspace}
+\newcommand{\csmash}{\textrm{ClusteredHMMClassifier}\xspace}
+\newcommand{\dtw}{\textrm{DTW}\xspace}
+\newcommand{\DKL}[2]{
+  \mathcal{D}_{\textrm{KL}}\parenBar{#1}{#2}}
+\newcommand{\quan}{\textrm{Quantizer}\xspace}
+
+\newcommand{\sklearn}{\textrm{scikit-learn}\xspace}
+\newcommand{\rfclf}{\textrm{RandomForestClassifier}\xspace}
+\newcommand{\adbclf}{\textrm{AdaBoostClassifier}\xspace}
+\newcommand{\gbclf}{\textrm{GradientBoostingClassifier}\xspace}
+\newcommand{\svclf}{\textrm{SVC}\xspace}
+\newcommand{\kmeans}{\textrm{KMeans}\xspace}
+\newcommand{\affprop}{\textrm{AffinityPropagation}\xspace}
+
+\def\SLD{\theta}
