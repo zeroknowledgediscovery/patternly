@@ -1,0 +1,67 @@
+\begin{thebibliography}{10}
+
+\bibitem{bondy2008graph}
+{\scshape J.~Bondy and U.~Murty}, {\em Graph theory (2008)}, Grad. Texts in
+  Math,  (2008).
+
+\bibitem{chandola2009anomaly}
+{\scshape V.~Chandola, A.~Banerjee, and V.~Kumar}, {\em Anomaly detection: A
+  survey}, ACM computing surveys (CSUR), 41 (2009), pp.~1--58.
+
+\bibitem{chattopadhyay2020deep}
+{\scshape I.~Chattopadhyay, Y.~Huang, and J.~Evans}, {\em Deep learning without
+  neural networks: Fractal-nets for rare event modeling},  (2020).
+
+\bibitem{chattopadhyay2013abductive}
+{\scshape I.~Chattopadhyay and H.~Lipson}, {\em Abductive learning of quantized
+  stochastic processes with probabilistic finite automata}, Philosophical
+  Transactions of the Royal Society A: Mathematical, Physical and Engineering
+  Sciences, 371 (2013), p.~20110543.
+
+\bibitem{chattopadhyay2014data}
+\leavevmode\vrule height 2pt depth -1.6pt width 23pt, {\em Data smashing:
+  uncovering lurking order in data}, Journal of The Royal Society Interface, 11
+  (2014), p.~20140826.
+
+\bibitem{chattopadhyay2008structural}
+{\scshape I.~Chattopadhyay and A.~Ray}, {\em Structural transformations of
+  probabilistic finite state machines}, International Journal of Control, 81
+  (2008), pp.~820--835.
+
+\bibitem{cover2012elements}
+{\scshape T.~M. Cover and J.~A. Thomas}, {\em Elements of information theory},
+  John Wiley \& Sons, 2012.
+
+\bibitem{crutchfield1994calculi}
+{\scshape J.~P. Crutchfield}, {\em The calculi of emergence: computation,
+  dynamics and induction}, Physica D: Nonlinear Phenomena, 75 (1994),
+  pp.~11--54.
+
+\bibitem{hodge2004survey}
+{\scshape V.~Hodge and J.~Austin}, {\em A survey of outlier detection
+  methodologies}, Artificial intelligence review, 22 (2004), pp.~85--126.
+
+\bibitem{liu2008isolation}
+{\scshape F.~T. Liu, K.~M. Ting, and Z.-H. Zhou}, {\em Isolation forest}, in
+  2008 eighth ieee international conference on data mining, IEEE, 2008,
+  pp.~413--422.
+
+\bibitem{markou2003novelty}
+{\scshape M.~Markou and S.~Singh}, {\em Novelty detection: a review—part 1:
+  statistical approaches}, Signal processing, 83 (2003), pp.~2481--2497.
+
+\bibitem{rabiner1989tutorial}
+{\scshape L.~R. Rabiner}, {\em A tutorial on hidden markov models and selected
+  applications in speech recognition}, Proceedings of the IEEE, 77 (1989),
+  pp.~257--286.
+
+\bibitem{vidyasagar2007bounds}
+{\scshape M.~Vidyasagar}, {\em Bounds on the kullback-leibler divergence rate
+  between hidden markov models}, in 2007 46th IEEE Conference on Decision and
+  Control, IEEE, 2007, pp.~6160--6165.
+
+\bibitem{vidyasagar2014hidden}
+{\scshape M.~Vidyasagar}, {\em Hidden markov processes: Theory and applications
+  to biology}, vol.~44, Princeton University Press, 2014.
+
+\end{thebibliography}
