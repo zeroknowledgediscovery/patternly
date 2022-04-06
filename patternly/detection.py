@@ -1,12 +1,12 @@
 import dill
 import numpy as np
 import pandas as pd
-from sklearn.cluster import KMeans, DBSCAN
+from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from zedsuite.zutil import Llk, Lsmash, Prun, DrawPFSA
 from zedsuite.genesess import GenESeSS
 from zedsuite.quantizer import Quantizer
-from patternly._utils import RANDOM_NAME, UnionFind, DirectedGraph
+from patternly._utils import RANDOM_NAME, DirectedGraph
 
 
 class AnomalyDetection:
@@ -121,7 +121,7 @@ class AnomalyDetection:
             # occurs when model is loaded from file
             if self.quantized_data is None:
                 raise ValueError("Original data not found. Pass data to predict().")
-            data = self.quantized_data.drop(columns=['cluster'], axis=1)
+            data = self.quantized_data.drop(columns=['cluster'], axis=1, errors='ignore')
             # data.to_csv('error.csv', sep=' ', index=False, header=False)
             num_predictions = self.quantized_data.shape[0]
         else:
@@ -633,7 +633,7 @@ class ContinuousStreamingDetection(StreamingDetection):
 
     def __init__(self, **kwargs):
         """
-        Args:
+        Args: see StreamingDetection
         """
 
         super().__init__(**kwargs)
@@ -650,23 +650,25 @@ class ContinuousStreamingDetection(StreamingDetection):
             ContinuousStreamingDetection: fitted model
         """
 
-        if not self.fitted:
-            raise ValueError("Model has not been fit yet.")
-
         if X is None:
             raise ValueError("Please pass data stream to fit.")
-
 
         X_split_streams = self.split_streams(X, self.window_size, self.window_overlap)
         data = self._AnomalyDetection__quantize(X_split_streams)
         num_predictions = data.shape[0]
 
-        cluster_llks = np.zeros(shape=(self.n_clusters, num_predictions), dtype=np.float32)
-
         def count_clusters(row):
             clusters = np.bincount(row)
             return clusters.size
         data['alphabet_size'] = data.apply(count_clusters, axis=1)
+
+        # if not fitted with previous data, create a PFSA from first stream
+        if not self.fitted:
+            self.n_clusters = 0
+            self.fitted = True
+            self.__add_to_PFSA_library(data.iloc[0])
+
+        cluster_llks = np.zeros(shape=(self.n_clusters, num_predictions), dtype=np.float32)
 
         for i, row in data.iterrows():
             upper_bounds = self.PFSA_llk_means + (self.PFSA_llk_stds * self.anomaly_sensitivity)
@@ -681,7 +683,7 @@ class ContinuousStreamingDetection(StreamingDetection):
             # in this case, we create a new model based on the anomalous pattern
             if np.all(cluster_llks.T[i] > upper_bounds):
                 self.__add_to_PFSA_library(row)
-                print(i, self.n_clusters)
+                # print(i, self.n_clusters)
                 cluster_llks = np.append(cluster_llks, np.zeros((1, num_predictions))).reshape((self.n_clusters, num_predictions))
                 cluster_llks[self.n_clusters - 1][i] = Llk(data=[row.drop(index=['alphabet_size'])], pfsafile=self.cluster_PFSA_files[self.n_clusters-1]).run()[0]
 
