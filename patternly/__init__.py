@@ -16,4 +16,4 @@ Installation:
    ```
 """
 from patternly._utils import RANDOM_NAME, os_remove
-from patternly.detection import AnomalyDetection, StreamingDetection
+from patternly.detection import AnomalyDetection, StreamingDetection, ContinuousStreamingDetection
