@@ -341,7 +341,9 @@ As fixed base sets,,  we use $\mathcal{G}$ composed the four simple PFSA shown. 
 \section{Notion of Anomaly Discovery}
 
 \section{Dynamic Discovery of New PFSAs}
-While it is possible to specify the number of PFSAs to generate for a given time series, this approach is only valid when the constraints of the problem motivate an intuition a prior of the number of clusters expected to be present. In cases when no such assumptions can be made with confidence, \texttt{patternly} can be utilized to dynamically construct a library of PFSAs with no predefined number of models to look for. During fitting, when \texttt{patternly} discovers a new sequence of data that does not map back to any of the previously discovered models in its current library, it will generate a new PFSA to account for this anomalous sequence and add it to the library for future reference.
+While it is possible to explicitly specify the number of PFSAs to generate for a given time series, this approach remains valid only when the constraints of the problem motivate an intuition a prior concerning the number of clusters expected to be present. In cases when no such assumptions can be made with confidence, \texttt{patternly} can be utilized to dynamically construct a library of PFSAs without the necessity of a preconceived notion describing the number of models present. During fitting, when \texttt{patternly} discovers a sequence of data that does not map back to any of the previously established models in the library, it will generate a new PFSA to account for this seemingly anomalous sequence and adds it to the library for future reference. 
+
+In addition to adding the new PFSA to the library, the time of emergence is also recorded to aid endeavors of understanding how the emergence of patterns in the dynamical system change over time. Do they exhibit cyclic behavior, a constant drifting away from a certain point, or something else entirely?
    
 %#####################################################
 

@@ -1,0 +1,9 @@
+# Fdb version 3
+["pdflatex"] 1649966063 "custom_defs.tex" "custom_defs.pdf" "custom_defs" 1649966063
+  "/usr/share/texmf-dist/web2c/texmf.cnf" 1647844622 39911 2da6c67557ec033436fe5418a70a8a61 ""
+  "/var/lib/texmf/web2c/pdftex/pdflatex.fmt" 1648604975 2924507 871cb0f8ed37471f06dc187f6dd65fe1 ""
+  "custom_defs.aux" 1649965995 32 3985256e7290058c681f74d7a3565a19 ""
+  "custom_defs.tex" 1646864200 1479 faf1e6c8966c8710211241e1119caf5a ""
+  (generated)
+  "custom_defs.log"
+  "custom_defs.pdf"

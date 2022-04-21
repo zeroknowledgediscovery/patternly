@@ -1,0 +1,5 @@
+PWD /home/drewvlaz/Documents/ZeD/repos/patternly/tex
+INPUT /usr/share/texmf-dist/web2c/texmf.cnf
+INPUT /var/lib/texmf/web2c/pdftex/pdflatex.fmt
+INPUT custom_defs.tex
+OUTPUT custom_defs.log
