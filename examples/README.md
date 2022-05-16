@@ -1,5 +1,8 @@
 # Examples
 
+This directory is a repository of example usages of ```patternly```
+in self-contained jupyter notebooks.
+
 ## Basic Examples
 + example 0: 2023 samples
 + example 1: 55 samples
@@ -7,6 +10,8 @@
 + example 3: 55 samples
 
 ## Satellite Data
+
+_Located in ```./data/01_2015_LANL-01A_SOPA_MPA.txt```_
 
 A satellite data set containing particle counts in 19 energy bands (in keV):
 ``` 60.7, 89.42, 128.99, 185.7, 274.8, 394.62, 577.44, 840.33, 1122.5, 1210.3, 1580.99, 1989.97, 2437.21, 3074.09, 3968.63, 5196.15, 6841.05, 9178.24, and 16692.51.```
@@ -33,4 +38,4 @@ partitioned into sequences of uniform window length.
   PFSAs in the library, we construct a new PFSA and add it to the established library
   rather than marking these unknown sequences as anamolous.
 
-## Test data and notebooks
+<!-- ## Test data and notebooks -->
