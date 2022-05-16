@@ -1,5 +1,6 @@
 # Examples
 
+## Basic Examples
 + example 0: 2023 samples
 + example 1: 55 samples
 + example 2: streaming example (single stream, anomaly arises somewhere along the stream)
@@ -21,13 +22,15 @@ partitioned into sequences of uniform window length.
 
 + ```Satellite_continuous_streaming```: No set amount of clusters is
   predefined. Instead, ```patternly``` analyzes the continuous streams and
-  contstructs  a PFSA library when it comes across an uknown sequence.
+  contstructs a new PFSA to add to the library when it comes across an sequence
+  that does not map back to any of the already established PFSAs.
 
-+ ```Satellite_half_assign_half_stream```: This approach is imilar to both
++ ```Satellite_half_assign_half_stream```: This approach is similar to both
   ```Satellite_manually_assign_clusters``` and
   ```Satellite_continuous_streaming```. We first establish a set number of
   PFSAs to construct for the first half of the data. Then, upon streaming the
-  second half of the data, we add new PFSAs to the already established library
+  second half of the data, when we come across sequences that do not map back to any of the
+  PFSAs in the library, we construct a new PFSA and add it to the established library
   rather than marking these unknown sequences as anamolous.
 
 ## Test data and notebooks
