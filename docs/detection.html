@@ -27,18 +27,15 @@
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">import os
-import subprocess as sp
-
-import dill
+<pre><code class="python">import dill
 import numpy as np
 import pandas as pd
-from sklearn.cluster import KMeans, DBSCAN
+from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from zedsuite.zutil import Llk, Lsmash, Prun, DrawPFSA
 from zedsuite.genesess import GenESeSS
 from zedsuite.quantizer import Quantizer
-from patternly._utils import RANDOM_NAME, UnionFind, DirectedGraph
+from patternly._utils import RANDOM_NAME, DirectedGraph
 
 
 class AnomalyDetection:
@@ -52,7 +49,7 @@ class AnomalyDetection:
         reduce_clusters=True,
         clustering_alg=None,
         quantize=True,
-        quantize_type=&#34;complex&#34;,
+        quantize_type=&#39;complex&#39;,
         eps=0.1,
         verbose=False
     ) -&gt; None:
@@ -84,8 +81,8 @@ class AnomalyDetection:
         self.quantize_type = quantize_type
         self.eps = eps
         self.verbose = verbose
-        self.temp_dir = &#34;zed_temp&#34;
-        self.PFSA_prop_titles =  [&#34;%ANN_ERR&#34;, &#34;%MRG_EPS&#34;, &#34;%SYN_STR&#34;, &#34;%SYM_FRQ&#34;, &#34;%PITILDE&#34;, &#34;%CONNX&#34;]
+        self.temp_dir = &#39;zed_temp&#39;
+        self.PFSA_prop_titles =  [&#39;%ANN_ERR&#39;, &#39;%MRG_EPS&#39;, &#39;%SYN_STR&#39;, &#39;%SYM_FRQ&#39;, &#39;%PITILDE&#39;, &#39;%CONNX&#39;]
 
         # values calculated in self.fit()
         self.fitted = False                # whether model has been fit
@@ -103,6 +100,7 @@ class AnomalyDetection:
         # can be accessed after calling self.predict()
         self.cluster_llks = None           # list of llk of each prediction for each cluster
         self.closest_match = None          # cluster label of closest match for each prediction
+        self.predicted_active_pfsas = {}   # dictionary of each pfsa active at each unit of time in the sequence
 
 
     def fit(self, X, y=None):
@@ -143,7 +141,7 @@ class AnomalyDetection:
         &#34;&#34;&#34;
 
         if not self.fitted:
-            raise ValueError(&#34;Model has not been fit yet&#34;)
+            raise ValueError(&#34;Model has not been fit yet.&#34;)
 
         data = None
         num_predictions = 0
@@ -152,16 +150,27 @@ class AnomalyDetection:
             # occurs when model is loaded from file
             if self.quantized_data is None:
                 raise ValueError(&#34;Original data not found. Pass data to predict().&#34;)
-            data = self.quantized_data.drop(columns=[&#34;cluster&#34;], axis=1)
+            data = self.quantized_data.drop(columns=[&#39;cluster&#39;], axis=1, errors=&#39;ignore&#39;)
+            # data.to_csv(&#39;error.csv&#39;, sep=&#39; &#39;, index=False, header=False)
             num_predictions = self.quantized_data.shape[0]
         else:
             data = self.__quantize(X)
             num_predictions = 1 if type(X) is pd.Series else data.shape[0]
 
-        cluster_llks = np.empty(shape=(self.n_clusters, num_predictions), dtype=np.float32)
+        cluster_llks = np.zeros(shape=(self.n_clusters, num_predictions), dtype=np.float32)
+
+        def count_clusters(row):
+            clusters = np.bincount(row)
+            return clusters.size
+        data[&#39;alphabet_size&#39;] = data.apply(count_clusters, axis=1)
+
         for i in range(self.n_clusters):
-            # cluster_llks[i] = np.asarray(Llk(data=data, pfsafile=self.cluster_PFSA_files[i]).run(), dtype=np.float32)
-            llks = Llk(data=data, pfsafile=self.cluster_PFSA_files[i]).run()
+            curr_alphabet_size = len(self.cluster_PFSA_info[i][&#39;%SYM_FRQ&#39;])
+            curr_data = data[data[&#39;alphabet_size&#39;] &lt;= curr_alphabet_size].drop(columns=[&#39;alphabet_size&#39;], axis=1)
+            llks = Llk(data=curr_data, pfsafile=self.cluster_PFSA_files[i]).run()
+            llks = pd.concat(
+                [data[0], pd.DataFrame(llks, index=curr_data.index, columns=[&#39;llks&#39;])], axis=1
+            ).fillna(float(&#39;inf&#39;))[&#39;llks&#39;].values.tolist()
             cluster_llks[i] = np.asarray(llks, dtype=np.float32)
 
         # consider to be anomaly if all llks above specified upper bound (X standard deviations above the mean)
@@ -170,14 +179,20 @@ class AnomalyDetection:
 
         self.cluster_llks = cluster_llks
         self.closest_match = np.argmin(cluster_llks, axis=0)
+        self.predicted_active_pfsas = {}
+        for i, pfsa in enumerate(self.closest_match):
+            if pfsa in self.predicted_active_pfsas:
+                self.predicted_active_pfsas[pfsa].append(i)
+            else:
+                self.predicted_active_pfsas[pfsa] = [i]
 
         if len(predictions) == 1:
-            predictions = predictions[0]
+            return predictions[0]
 
         return predictions
 
 
-    def save_model(self, path=&#34;patternly_model.dill&#34;):
+    def save_model(self, path=&#39;patternly_model.dill&#39;):
         &#34;&#34;&#34; Save model to file
 
         Args:
@@ -185,37 +200,37 @@ class AnomalyDetection:
         &#34;&#34;&#34;
 
         if not self.fitted:
-            raise ValueError(&#34;Model has not been fit yet&#34;)
+            raise ValueError(&#34;Model has not been fit yet.&#34;)
 
         metadata = {
-            &#34;modeltype&#34;: type(self),
-            &#34;user_params&#34;: {
-                &#34;anomaly_sensitivity&#34;: self.anomaly_sensitivity,
-                &#34;n_clusters&#34;: self.n_clusters,
-                &#34;reduce_clusters&#34;: self.reduce_clusters,
-                &#34;clustering_alg&#34;: self.clustering_alg,
-                &#34;quantize&#34;: self.quantize,
-                &#34;quantize_type&#34;: self.quantize_type,
-                &#34;eps&#34;: self.eps,
-                &#34;verbose&#34;: self.verbose,
+            &#39;modeltype&#39;: type(self),
+            &#39;user_params&#39;: {
+                &#39;anomaly_sensitivity&#39;: self.anomaly_sensitivity,
+                &#39;n_clusters&#39;: self.n_clusters,
+                &#39;reduce_clusters&#39;: self.reduce_clusters,
+                &#39;clustering_alg&#39;: self.clustering_alg,
+                &#39;quantize&#39;: self.quantize,
+                &#39;quantize_type&#39;: self.quantize_type,
+                &#39;eps&#39;: self.eps,
+                &#39;verbose&#39;: self.verbose,
             },
-            &#34;fitted_params&#34;: {
-                &#34;quantizer_parameters&#34;: None if self.quantizer is None else self.quantizer.parameters ,
-                &#34;quantizer_feature_order&#34;: None if self.quantizer is None else self.quantizer._feature_order,
-                &#34;cluster_labels&#34;: self.cluster_labels,
-                &#34;cluster_counts&#34;: self.cluster_counts,
-                &#34;cluster_PFSA_info&#34;: self.cluster_PFSA_info,
-                &#34;PFSA_llk_means&#34;: self.PFSA_llk_means.tolist(),
-                &#34;PFSA_llk_stds&#34;: self.PFSA_llk_stds.tolist()
+            &#39;fitted_params&#39;: {
+                &#39;quantizer_parameters&#39;: None if self.quantizer is None else self.quantizer.parameters ,
+                &#39;quantizer_feature_order&#39;: None if self.quantizer is None else self.quantizer._feature_order,
+                &#39;cluster_labels&#39;: self.cluster_labels,
+                &#39;cluster_counts&#39;: self.cluster_counts,
+                &#39;cluster_PFSA_info&#39;: self.cluster_PFSA_info,
+                &#39;PFSA_llk_means&#39;: self.PFSA_llk_means.tolist(),
+                &#39;PFSA_llk_stds&#39;: self.PFSA_llk_stds.tolist()
             }
         }
 
-        with open(path, &#34;wb&#34;) as f:
+        with open(path, &#39;wb&#39;) as f:
             dill.dump(metadata, f)
 
 
     @staticmethod
-    def load_model(path=&#34;patternly_model.dill&#34;):
+    def load_model(path=&#39;patternly_model.dill&#39;):
         &#34;&#34;&#34; Load saved model
 
             Args:
@@ -225,24 +240,24 @@ class AnomalyDetection:
                 AnomalyDetection or StreamingDetection: loaded model
         &#34;&#34;&#34;
 
-        with open(path, &#34;rb&#34;) as f:
+        with open(path, &#39;rb&#39;) as f:
             metadata = dill.load(f)
 
         model = None
-        if metadata[&#34;modeltype&#34;] is AnomalyDetection:
-            model = AnomalyDetection(**metadata[&#34;user_params&#34;])
+        if metadata[&#39;modeltype&#39;] is AnomalyDetection:
+            model = AnomalyDetection(**metadata[&#39;user_params&#39;])
         else:
-            model = StreamingDetection(**metadata[&#34;user_params&#34;])
+            model = StreamingDetection(**metadata[&#39;user_params&#39;])
 
-        if model.quantize and model.quantize_type == &#34;complex&#34;:
+        if model.quantize and model.quantize_type == &#39;complex&#39;:
             model.quantizer = Quantizer(n_quantizations=1, eps=-1)
-            model.quantizer.parameters = metadata[&#34;fitted_params&#34;][&#34;quantizer_parameters&#34;]
-            model.quantizer._feature_order = metadata[&#34;fitted_params&#34;][&#34;quantizer_feature_order&#34;]
-        model.cluster_labels = metadata[&#34;fitted_params&#34;][&#34;cluster_labels&#34;]
-        model.cluster_counts = metadata[&#34;fitted_params&#34;][&#34;cluster_counts&#34;]
-        model.cluster_PFSA_info = metadata[&#34;fitted_params&#34;][&#34;cluster_PFSA_info&#34;]
-        model.PFSA_llk_means = np.asarray(metadata[&#34;fitted_params&#34;][&#34;PFSA_llk_means&#34;])
-        model.PFSA_llk_stds = np.asarray(metadata[&#34;fitted_params&#34;][&#34;PFSA_llk_stds&#34;])
+            model.quantizer.parameters = metadata[&#39;fitted_params&#39;][&#39;quantizer_parameters&#39;]
+            model.quantizer._feature_order = metadata[&#39;fitted_params&#39;][&#39;quantizer_feature_order&#39;]
+        model.cluster_labels = metadata[&#39;fitted_params&#39;][&#39;cluster_labels&#39;]
+        model.cluster_counts = metadata[&#39;fitted_params&#39;][&#39;cluster_counts&#39;]
+        model.cluster_PFSA_info = metadata[&#39;fitted_params&#39;][&#39;cluster_PFSA_info&#39;]
+        model.PFSA_llk_means = np.asarray(metadata[&#39;fitted_params&#39;][&#39;PFSA_llk_means&#39;])
+        model.PFSA_llk_stds = np.asarray(metadata[&#39;fitted_params&#39;][&#39;PFSA_llk_stds&#39;])
         # print(model.PFSA_llk_means)
         # print(model.PFSA_llk_stds)
 
@@ -250,8 +265,8 @@ class AnomalyDetection:
         model.cluster_PFSA_files = []
         for i in range(model.n_clusters):
             model.cluster_PFSA_files.append(RANDOM_NAME(path=model.temp_dir))
-            with open(model.cluster_PFSA_files[i], &#34;w&#34;) as f:
-                f.write(f&#34;{model.__format_PFSA_info(model.cluster_PFSA_info[i])}&#34;)
+            with open(model.cluster_PFSA_files[i], &#39;w&#39;) as f:
+                f.write(f&#39;{model.__format_PFSA_info(model.cluster_PFSA_info[i])}&#39;)
                 # print(model.__format_PFSA_info(model.cluster_PFSA_info[i]))
         # model.generate_PFSA_pngs()
 
@@ -264,7 +279,7 @@ class AnomalyDetection:
         &#34;&#34;&#34; Print PFSAs found for each cluster &#34;&#34;&#34;
 
         if not self.fitted:
-            raise ValueError(&#34;Model has not been fit yet&#34;)
+            raise ValueError(&#34;Model has not been fit yet.&#34;)
 
         for i in range(self.n_clusters):
             print(f&#34;Cluster {i} PFSA:&#34;)
@@ -303,15 +318,15 @@ class AnomalyDetection:
         if type(X) is pd.Series:
             X = X.copy().to_frame().reset_index(drop=True).T
 
-        if self.quantize_type == &#34;simple&#34;:
+        if self.quantize_type == &#39;simple&#39;:
             # basic differentiation
             X = X.astype(float).diff(axis=1).fillna(0)
             return X.apply(lambda row : row.apply(lambda n : 1 if n &gt; 0 else 0), axis=1)
-        elif self.quantize_type == &#34;simple-second&#34;:
+        elif self.quantize_type == &#39;simple-second&#39;:
             # second derivative
             X = X.astype(float).diff(axis=1).fillna(0).diff(axis=1).fillna(0)
             return X.apply(lambda row : row.apply(lambda n : 1 if n &gt; 0 else 0), axis=1)
-        elif self.quantize_type == &#34;complex&#34;:
+        elif self.quantize_type == &#39;complex&#39;:
             # use cythonized quantizer binary
             if not self.fitted:
                 self.quantizer = Quantizer(n_quantizations=1, epsilon=-1)
@@ -335,7 +350,7 @@ class AnomalyDetection:
             self.dist_matrix = self.quantized_data
         else:
             self.dist_matrix = pd.DataFrame(
-                Lsmash(data=self.quantized_data, data_type=&#34;symbolic&#34;, sae=False).run(),
+                Lsmash(data=self.quantized_data, data_type=&#39;symbolic&#39;, sae=False).run(),
                 dtype=np.float32
             )
 
@@ -364,10 +379,23 @@ class AnomalyDetection:
         cluster_labels = [cluster_rank[cluster] for cluster in cluster_labels]
         cluster_counts = [cluster_counts[cluster] for cluster in np.argsort(cluster_counts)][::-1]
 
+        # def adjust_clusters(row):
+        #     bins = np.bincount(row)
+        #     offset = [0 for _ in range(len(bins))]
+        #     preceeding_zeros = 0
+        #     for i, bin in enumerate(bins):
+        #         if bin == 0:
+        #             preceeding_zeros += 1
+        #         offset[i] = preceeding_zeros
+        #     return row.apply(lambda val: val - offset[val])
+        # self.quantized_data = self.quantized_data.apply(adjust_clusters, axis=1)
+
         self.n_clusters = n_clusters
         self.cluster_counts = cluster_counts
         self.cluster_labels = cluster_labels
-        self.quantized_data[&#34;cluster&#34;] = cluster_labels
+        self.quantized_data[&#39;cluster&#39;] = cluster_labels
+        # self.quantized_data[&#39;alphabet_size&#39;] = self.quantized_data.apply(count_clusters, axis=1)
+        # self.quantized_data[self.quantized_data[&#39;cluster&#39;] == 0].to_csv(&#39;firstcluster.csv&#39;, sep=&#39; &#39;, header=False, index=False)
 
 
     def __calculate_cluster_PFSAs(self):
@@ -378,7 +406,9 @@ class AnomalyDetection:
         for i in range(self.n_clusters):
             if self.verbose:
                 print(f&#34;Generating cluster PFSA {i + 1}/{self.n_clusters}...&#34;)
-            cluster_data = self.quantized_data[self.quantized_data[&#34;cluster&#34;] == i].drop(columns=[&#34;cluster&#34;], axis=1)
+            cluster_data = self.quantized_data[self.quantized_data[&#39;cluster&#39;] == i].drop(
+                columns=[&#39;cluster&#39;], axis=1
+            )
             cluster_PFSA_file = RANDOM_NAME(path=self.temp_dir)
             dot_file = RANDOM_NAME(path=self.temp_dir)
             cluster_PFSA_files.append(cluster_PFSA_file)
@@ -386,11 +416,12 @@ class AnomalyDetection:
             alg = GenESeSS(
                 data=cluster_data,
                 outfile=cluster_PFSA_file,
-                data_type=&#34;symbolic&#34;,
-                data_dir=&#34;row&#34;,
+                data_type=&#39;symbolic&#39;,
+                data_dir=&#39;row&#39;,
                 force=True,
                 eps=self.eps,
                 dot=dot_file,
+                configfile=&#39;./patternly/config.cfg&#39;
             )
             # TODO: add error handling for when genESeSS fails to find a PFSA
             PFSA_found = alg.run()
@@ -422,22 +453,23 @@ class AnomalyDetection:
         if self.verbose:
             print(&#34;Attempting to reduce clusters...&#34;)
 
-        # generate representative sequences for each cluster PFSA
-        #  seq_len = 1000
-        #  seqs_per_pfsa = 100
-        #  all_clusters_seqs = [
-            #  Prun(pfsafile=pfsa, data_len=seq_len, num_repeats=seqs_per_pfsa).run()
-            #  for pfsa in self.cluster_PFSA_files
-        #  ]
-
         all_cluster_likelihoods = np.empty(shape=(self.n_clusters, self.n_clusters), dtype=np.float32)
         all_ranked_likelihoods = np.empty(shape=(self.n_clusters, self.n_clusters), dtype=np.int32)
 
         for i in range(self.n_clusters):
             cluster_llks = []
-            for pfsafile in self.cluster_PFSA_files:
-                cluster_data = self.quantized_data[self.quantized_data[&#34;cluster&#34;] == i].drop(columns=[&#34;cluster&#34;], axis=1)
-                cluster_llks.append(np.asarray(Llk(data=cluster_data, pfsafile=pfsafile).run(), dtype=np.float32))
+            for j in range(self.n_clusters):
+                curr_alphabet_size = len(self.cluster_PFSA_info[j][&#39;%SYM_FRQ&#39;])
+                cluster_data = self.quantized_data[self.quantized_data[&#39;cluster&#39;] == i]
+                curr_data = cluster_data
+                # curr_data = cluster_data[cluster_data[&#39;alphabet_size&#39;] &lt;= curr_alphabet_size].drop(
+                    # columns=[&#39;cluster&#39;, &#39;alphabet_size&#39;], axis=1
+                # )
+                llks = [] if curr_data.shape[0] == 0 else Llk(data=curr_data, pfsafile=self.cluster_PFSA_files[j]).run()
+                # llks = pd.concat(
+                    # [cluster_data[0], pd.DataFrame(llks, index=curr_data.index, columns=[&#39;llks&#39;])], axis=1
+                # ).fillna(float(&#39;inf&#39;))[&#39;llks&#39;].values.tolist()
+                cluster_llks.append(np.asarray(llks, dtype=np.float32))
 
             # which cluster PFSA each sequence most likely maps back to
             closest_matches = np.argmin(cluster_llks, axis=0)
@@ -445,12 +477,14 @@ class AnomalyDetection:
             cluster_likelihoods = np.count_nonzero(
                 (closest_matches.reshape(-1, 1) == np.arange(self.n_clusters).reshape(1, -1)),
                 axis=0
-            ) / self.quantized_data[self.quantized_data[&#34;cluster&#34;] == i].shape[0]
+            ) 
+            cluster_likelihoods = cluster_likelihoods / cluster_likelihoods.sum()
             # list of cluster PFSAs sorted in descending order of likelihood
             ranked_likelihoods = np.argsort(cluster_likelihoods)[::-1]
 
             all_cluster_likelihoods[i] = cluster_likelihoods
             all_ranked_likelihoods[i] = ranked_likelihoods
+            # print(all_cluster_likelihoods)
 
         for i in range(self.n_clusters):
             best_match = all_ranked_likelihoods[i][0]
@@ -466,7 +500,7 @@ class AnomalyDetection:
             self.n_clusters = new_n_clusters
             #  reduced_clusters = set(graph.roots)
             #  self.cluster_labels = [graph.roots[cluster] for cluster in self.cluster_labels]
-            #  self.quantized_data[&#34;cluster&#34;] = self.cluster_labels
+            #  self.quantized_data[&#39;cluster&#39;] = self.cluster_labels
             #  self.cluster_PFSA_files = [self.cluster_PFSA_files[i] for i in reduced_clusters]
             #  self.cluster_PFSA_info = [self.cluster_PFSA_info[i] for i in reduced_clusters]
             #  self.cluster_PFSA_pngs = [self.cluster_PFSA_pngs[i] for i in reduced_clusters]
@@ -490,10 +524,21 @@ class AnomalyDetection:
         PFSA_llk_means = np.empty(shape=self.n_clusters)
         PFSA_llk_stds = np.empty(shape=self.n_clusters)
         for i in range(self.n_clusters):
-            cluster_data = self.quantized_data[self.quantized_data[&#34;cluster&#34;] == i].drop(columns=[&#34;cluster&#34;], axis=1)
+            cluster_data = self.quantized_data[self.quantized_data[&#39;cluster&#39;] == i].drop(
+                columns=[&#39;cluster&#39;], axis=1
+            )
             llks = np.asarray(Llk(data=cluster_data, pfsafile=self.cluster_PFSA_files[i]).run(), dtype=np.float32)
             PFSA_llk_means[i] = np.mean(llks)
             PFSA_llk_stds[i] = np.std(llks, ddof=1)
+
+        # for i in range(self.n_clusters):
+        #     curr_alphabet_size = len(self.cluster_PFSA_info[i][&#39;%SYM_FRQ&#39;])
+        #     curr_data = data[data[&#39;alphabet_size&#39;] &lt;= curr_alphabet_size].drop(columns=[&#39;cluster&#39;, &#39;alphabet_size&#39;], axis=1)
+        #     llks = Llk(data=curr_data, pfsafile=self.cluster_PFSA_files[i]).run()
+        #     llks = pd.concat(
+        #         [data[0], pd.DataFrame(llks, index=curr_data.index, columns=[&#39;llks&#39;])], axis=1
+        #     ).fillna(float(&#39;inf&#39;))[&#39;llks&#39;].values.tolist()
+        #     cluster_llks[i] = np.asarray(llks, dtype=np.float32)
 
         self.PFSA_llk_means, self.PFSA_llk_stds = PFSA_llk_means, PFSA_llk_stds
 
@@ -509,29 +554,29 @@ class AnomalyDetection:
                 str: formatted PFSA information
         &#34;&#34;&#34;
 
-        indent = indent_level * &#34; &#34;
+        indent = indent_level * &#39; &#39;
 
-        syn_str_vals = &#34;&#34;
-        if PFSA_info[&#34;%SYN_STR&#34;] is not None:
-            for syn_str in PFSA_info[&#34;%SYN_STR&#34;]:
-                syn_str_vals += (f&#34;{syn_str} &#34;)
+        syn_str_vals = &#39;&#39;
+        if PFSA_info[&#39;%SYN_STR&#39;] is not None:
+            for syn_str in PFSA_info[&#39;%SYN_STR&#39;]:
+                syn_str_vals += (f&#39;{syn_str} &#39;)
 
-        sym_frq_vals = &#34;&#34;
-        for sym_frq in PFSA_info[&#34;%SYM_FRQ&#34;]:
-            sym_frq_vals += (f&#34;{sym_frq} &#34;)
+        sym_frq_vals = &#39;&#39;
+        for sym_frq in PFSA_info[&#39;%SYM_FRQ&#39;]:
+            sym_frq_vals += (f&#39;{sym_frq} &#39;)
 
         pitilde_vals = indent
-        for row in PFSA_info[&#34;%PITILDE&#34;]:
+        for row in PFSA_info[&#39;%PITILDE&#39;]:
             for i, val in enumerate(row):
-                suffix = &#34; &#34; if (i+1) &lt; len(row) else f&#34; \n{indent}&#34;
-                pitilde_vals += (f&#34;{val}{suffix}&#34;)
+                suffix = &#39; &#39; if (i+1) &lt; len(row) else f&#39; \n{indent}&#39;
+                pitilde_vals += (f&#39;{val}{suffix}&#39;)
         pitilde_vals = pitilde_vals[:-len(indent)] if indent_level &gt; 0 else pitilde_vals
 
         connx_vals = indent
-        for row in PFSA_info[&#34;%CONNX&#34;]:
+        for row in PFSA_info[&#39;%CONNX&#39;]:
             for i, val in enumerate(row):
-                suffix = &#34; &#34; if (i+1) &lt; len(row) else f&#34; \n{indent}&#34;
-                connx_vals += (f&#34;{val}{suffix}&#34;)
+                suffix = &#39; &#39; if (i+1) &lt; len(row) else f&#39; \n{indent}&#39;
+                connx_vals += (f&#39;{val}{suffix}&#39;)
         connx_vals = connx_vals[:-len(indent)] if indent_level &gt; 0 else connx_vals
 
         return (
@@ -578,16 +623,16 @@ class StreamingDetection(AnomalyDetection):
             return super().predict(X_split_streams)
 
     
-    def save_model(self, path=&#34;patternly_model.dill&#34;):
+    def save_model(self, path=&#39;patternly_model.dill&#39;):
         super().save_model(path=path)
 
-        with open(path, &#34;rb&#34;) as f:
+        with open(path, &#39;rb&#39;) as f:
             metadata = dill.load(f)
 
-        metadata[&#34;user_params&#34;][&#34;window_size&#34;] = self.window_size
-        metadata[&#34;user_params&#34;][&#34;window_overlap&#34;] = self.window_overlap
+        metadata[&#39;user_params&#39;][&#39;window_size&#39;] = self.window_size
+        metadata[&#39;user_params&#39;][&#39;window_overlap&#39;] = self.window_overlap
 
-        with open(path, &#34;wb&#34;) as f:
+        with open(path, &#39;wb&#39;) as f:
             dill.dump(metadata, f)
 
 
@@ -600,150 +645,139 @@ class StreamingDetection(AnomalyDetection):
                 X (pd.Series): data to be split into streams
         &#34;&#34;&#34;
 
+        if type(X) is not pd.DataFrame:
+            X = pd.DataFrame(X)
+
         def beg(i): return int((window_size * i) - (window_overlap * i))
         def end(i): return int(beg(i) + window_size)
         size = int(X.shape[0] // (window_size - window_overlap))
         return pd.concat(
             [X[beg(i):end(i)].reset_index(drop=True) for i in range(size)],
             axis=1
-        ).T.reset_index(drop=True)
+        ).T.reset_index(drop=True).dropna(how=&#39;any&#39;, axis=0)
 
 
-    # def visualize(self, num_plots, predictions):
-        # &#34;&#34;&#34; Visualize active clusters and anomalies in respect to the original data &#34;&#34;&#34;
-        # pass
-        # TODO: abstract and generalize for common use cases
+class ContinuousStreamingDetection(StreamingDetection):
+    &#34;&#34;&#34; Tool for anomaly detection within a single continual data stream &#34;&#34;&#34;
 
-        # import matplotlib.pyplot as plt
-        # from datetime import datetime
-        # plt.rcParams[&#34;figure.figsize&#34;] = (20, num_plots * 8)
+    def __init__(self, **kwargs):
+        &#34;&#34;&#34;
+        Args: see StreamingDetection
+        &#34;&#34;&#34;
 
-        # test_start_ts = test_info[&#34;meas_date&#34;].timestamp()
-        # for i, channel in enumerate(test_channels):
-            
-        #     plot_data = {}
-        #     plot_data[channel] = test_data
-        #     plot_data[&#34;ts&#34;] = pd.DataFrame([datetime.fromtimestamp(test_start_ts + (j / hz)) for j in range(plot_data[channel].shape[0])])
-        #     df = pd.concat([plot_data[channel], plot_data[&#34;ts&#34;]], axis=1)
-        #     df.columns = [&#34;data&#34;, &#34;ts&#34;]
-            
-        #     # plt.subplot(len(channels), 1, i+1)
-        #     plt.subplot(NUM_CHANNELS, 1, i+1)
-        #     plt.plot(df[&#34;ts&#34;], df[&#34;data&#34;], color=&#34;green&#34;, markersize=2, zorder=1)
+        self.pattern_emergence_times = []
+        super().__init__(**kwargs)
 
-        #     # highlight true anomalies
-        #     beg = datetime.fromtimestamp(test_start_ts + seizure_start_time)
-        #     end = datetime.fromtimestamp(test_start_ts + seizure_end_time)
-        #     plt.axvspan(beg, end, color=&#39;black&#39;, alpha=0.6, lw=0, zorder=2)
 
-        #     # highlight anomalies
-        #     anoms = list(predictions[i][predictions[i][0] == True].index)
-        #     for index in anoms:
-        #         beg = plot_data[&#34;ts&#34;].iloc[(index * self.window_size) - (index * self.window_overlap)]
-        #         end = plot_data[&#34;ts&#34;].iloc[min(((index + 1) * self.window_size) - (index * self.window_overlap), plot_data[&#34;ts&#34;].shape[0] - 1)]
-        #         plt.axvspan(beg, end, color=&#39;red&#39;, alpha=0.5, lw=0, zorder=3)
+    def fit_stream(self, X, *, clean=True):
+        &#34;&#34;&#34; Fit new stream of data
 
-        #     # highlight non-anomalies by cluster
-        #     colors = [&#34;#7766ee&#34;, &#34;blue&#34;, &#34;darkgreen&#34;, &#34;darkorange&#34;, &#39;cyan&#39;, &#34;navy&#34;, &#34;grey&#34;, &#34;yellow&#34;, &#34;white&#34;, &#34;purple&#34;]
-        #     # non_anomalies = predictions[predictions == False]
-        #     non_anomalies = list(predictions[i][predictions[i][0] == False].index)
-        #     for index in non_anomalies:
-        #         beg = plot_data[&#34;ts&#34;].iloc[(index * self.window_size) - (index * self.window_overlap)]
-        #         end = plot_data[&#34;ts&#34;].iloc[min(((index + 1) * self.window_size) - (index * self.window_overlap), plot_data[&#34;ts&#34;].shape[0] - 1)]
-        #         color = colors[pipelines[i].closest_match[index]]
-        #         plt.axvspan(beg, end, color=color, alpha=0.25, lw=0, zorder=0)
+        Args:
+            X (pd.DataFrame or pd.Series): time series data stream to find anomalies
+            clean (bool, optional): whether to remove temp files (Default = True)
 
-        #     # nice formatting
-        #     ax = plt.gca()
-        #     plt.setp(ax.get_xticklabels(), fontsize=16, y=-.02)
-        #     plt.setp(ax.get_yticklabels(), fontsize=16)
-        #     ax.tick_params(axis=&#39;x&#39;, colors=&#39;.5&#39;)    
-        #     ax.tick_params(axis=&#39;y&#39;, colors=&#39;.5&#39;, pad=15)  
-        #     ax.yaxis.offsetText.set_fontsize(16)
-        #     ax.spines[&#39;bottom&#39;].set_color(&#39;.75&#39;)
-        #     ax.spines[&#39;top&#39;].set_color(&#39;.75&#39;) 
-        #     ax.spines[&#39;right&#39;].set_color(&#39;.75&#39;)
-        #     ax.spines[&#39;left&#39;].set_color(&#39;.75&#39;)
-        #     ax.set_title(f&#34;{channel}&#34;, fontsize=16, y=1.02, color=&#39;.5&#39;)
+        Returns:
+            ContinuousStreamingDetection: fitted model
+        &#34;&#34;&#34;
 
-        # plt.tight_layout(pad=2)
-        # plt.show()
+        if X is None:
+            raise ValueError(&#34;Please pass data stream to fit.&#34;)
 
-# class AnomalyDetectionBin(AnomalyDetection):
-#     def __init__(self, **kwargs):
-#         super().__init__(**kwargs)
+        self.pattern_emergence_times = []
+        X_split_streams = self.split_streams(X, self.window_size, self.window_overlap)
+        data = self._AnomalyDetection__quantize(X_split_streams)
+        num_predictions = data.shape[0]
 
-#     @staticmethod
-#     def llk(data, pfsa_file, *, clean=True, data_file=None):
-#         data_file = RANDOM_NAME(clean) if data_file is None else data_file
-#         data.to_csv(data_file, sep=&#34; &#34;, index=False, header=False)
-#         llk_binary = os.path.abspath(&#34;./bin/llk&#34;)
-#         llpos = llk_binary + &#34; -s &#34; + data_file + &#34; -f &#34; + pfsa_file
+        def count_clusters(row):
+            clusters = np.bincount(row)
+            return clusters.size
+        data[&#39;alphabet_size&#39;] = data.apply(count_clusters, axis=1)
 
-#         try:
-#             df_toreturn = pd.DataFrame(
-#                 sp.check_output(llpos, shell=True, stderr=sp.DEVNULL).split()
-#             ).astype(float)
+        # if not fitted with previous data, create a PFSA from first stream
+        if not self.fitted:
+            self.n_clusters = 0
+            self.fitted = True
+            self.__add_to_PFSA_library(data.iloc[0])
+            self.pattern_emergence_times.append(0)
 
-#         except sp.CalledProcessError as e:
-#             print(f&#34;Failed: {e}&#34;)
-#         #     if clean:
-#         #         os_remove(data_file)
-#         #     # raise Binary_crashed()
-#         # if clean:
-#         #     os_remove(data_file)
+        cluster_llks = np.zeros(shape=(self.n_clusters, num_predictions), dtype=np.float32)
 
-#         df_toreturn.index = data.index
-#         return df_toreturn
+        for i, row in data.iterrows():
+            upper_bounds = self.PFSA_llk_means + (self.PFSA_llk_stds * self.anomaly_sensitivity)
+            for j in range(self.n_clusters):
+                curr_alphabet_size = len(self.cluster_PFSA_info[j][&#39;%SYM_FRQ&#39;])
+                if row[&#39;alphabet_size&#39;] &gt; curr_alphabet_size:
+                    cluster_llks[j][i] = float(&#39;inf&#39;)
+                    continue
+                cluster_llks[j][i] = Llk(data=[row.drop(index=[&#39;alphabet_size&#39;])], pfsafile=self.cluster_PFSA_files[j]).run()[0]
 
-#     def predict(self, X=None, *, clean=True):
-#         &#34;&#34;&#34; Predict whether a time series sequence is anomalous
+            # consider to be anomaly if all llks above specified upper bound (X standard deviations above the mean)
+            # in this case, we create a new model based on the anomalous pattern
+            if np.all(cluster_llks.T[i] &gt; upper_bounds):
+                self.pattern_emergence_times.append(i)
+                # print(i)
+                self.__add_to_PFSA_library(row)
+                # print(i, self.n_clusters)
+                cluster_llks = np.append(cluster_llks, np.zeros((1, num_predictions))).reshape((self.n_clusters, num_predictions))
+                cluster_llks[self.n_clusters - 1][i] = Llk(data=[row.drop(index=[&#39;alphabet_size&#39;])], pfsafile=self.cluster_PFSA_files[self.n_clusters-1]).run()[0]
 
-#         Args:
-#             X (pd.DataFrame or pd.Series, optional): time series data to find anomalies, if None then
-#                 predicts on original data (Default = None)
-#             clean (bool, optional): whether to remove temp files (Default = True)
+        upper_bounds = self.PFSA_llk_means + (self.PFSA_llk_stds * self.anomaly_sensitivity)
 
-#         Returns:
-#             bool or list[bool]: True if time series is an anomaly, False otherwise output shape depends on input
-#         &#34;&#34;&#34;
+        self.cluster_llks = cluster_llks
+        # self.closest_match = np.argmin(cluster_llks, axis=0)
+        # self.predicted_active_pfsas = {}
+        # for i, pfsa in enumerate(self.closest_match):
+        #     if pfsa in self.predicted_active_pfsas:
+        #         self.predicted_active_pfsas[pfsa].append(i)
+        #     else:
+        #         self.predicted_active_pfsas[pfsa] = [i]
 
-#         if not self.fitted:
-#             raise ValueError(&#34;Model has not been fit yet&#34;)
+        self.quantized_data = pd.concat([self.quantized_data, data.drop(columns=[&#39;alphabet_size&#39;])], axis=0).reset_index(drop=True)
 
-#         data = None
-#         num_predictions = 0
-#         # commonly want to find anomalies in original data
-#         if X is None:
-#             # occurs when model is loaded from file
-#             if self.quantized_data is None:
-#                 raise ValueError(&#34;Original data not found. Pass data to predict().&#34;)
-#             data = self.quantized_data.drop(columns=[&#34;cluster&#34;], axis=1)
-#             num_predictions = self.quantized_data.shape[0]
-#         else:
-#             data = self.__quantize(X)
-#             num_predictions = 1 if type(X) is pd.Series else data.shape[0]
+        return self
 
-#         cluster_llks = np.empty(shape=(self.n_clusters, num_predictions), dtype=np.float32)
-#         for i in range(self.n_clusters):
-#             # print(data)
-#             # print(i, self.cluster_PFSA_files[i])
-#             # print(Llk(data=data, pfsafile=self.cluster_PFSA_files[i]).run())
-#             # print(&#34;LLK RAN&#34;)
-#             # cluster_llks[i] = np.asarray(Llk(data=data, pfsafile=self.cluster_PFSA_files[i]).run(), dtype=np.float32)
-#             cluster_llks[i] = np.asarray(llk(data, self.cluster_PFSA_files[i]), dtype=np.float32)
 
-#         # consider to be anomaly if all llks above specified upper bound (X standard deviations above the mean)
-#         upper_bounds = self.PFSA_llk_means + (self.PFSA_llk_stds * self.anomaly_sensitivity)
-#         predictions = np.all(cluster_llks.T &gt; upper_bounds, axis=1)
+    def __add_to_PFSA_library(self, data):
+        &#34;&#34;&#34; Infer PFSA from data using genESeSS and update the PFSA library &#34;&#34;&#34;
 
-#         self.cluster_llks = cluster_llks
-#         self.closest_match = np.argmin(cluster_llks, axis=0)
+        cluster_PFSA_file = RANDOM_NAME(path=self.temp_dir)
+        PFSA_png = RANDOM_NAME(path=self.temp_dir)
+        
+        alg = GenESeSS(
+            data=[data.drop(index=[&#39;alphabet_size&#39;])],
+            outfile=cluster_PFSA_file,
+            data_type=&#39;symbolic&#39;,
+            data_dir=&#39;row&#39;,
+            force=True,
+            eps=self.eps,
+            dot=PFSA_png,
+            configfile=&#39;./patternly/config.cfg&#39;
+        )
 
-#         if len(predictions) == 1:
-#             predictions = predictions[0]
+        # TODO: add error handling for when genESeSS fails to find a PFSA
+        PFSA_found = alg.run()
+        if PFSA_found:
+            prop_vals = [
+                alg.inference_error,
+                alg.epsilon_used,
+                alg.synchronizing_string_found,
+                alg.symbol_frequency,
+                alg.probability_morph_matrix,
+                alg.connectivity_matrix,
+            ]
+            self.cluster_PFSA_info.append(dict(zip(self.PFSA_prop_titles, prop_vals)))
+        else:
+            raise ValueError(f&#34;Unable to find new PFSA for anomaly.&#34;)
 
-#         return predictions</code></pre>
+        self.cluster_PFSA_files.append(cluster_PFSA_file)
+        self.cluster_PFSA_pngs.append(PFSA_png)
+        self.n_clusters += 1
+
+        seqs = pd.DataFrame(Prun(pfsafile=cluster_PFSA_file, data_len=self.window_size, num_repeats=100).run())
+        new_data = pd.concat([pd.DataFrame(data.drop(index=[&#39;alphabet_size&#39;])).T, seqs], axis=0)
+        llks = np.asarray(Llk(data=new_data, pfsafile=self.cluster_PFSA_files[self.n_clusters-1]).run())
+        self.PFSA_llk_means = np.mean(llks)
+        self.PFSA_llk_stds = np.std(llks, ddof=1)</code></pre>
 </details>
 </section>
 <section>
@@ -807,7 +841,7 @@ calling fit()</dd>
         reduce_clusters=True,
         clustering_alg=None,
         quantize=True,
-        quantize_type=&#34;complex&#34;,
+        quantize_type=&#39;complex&#39;,
         eps=0.1,
         verbose=False
     ) -&gt; None:
@@ -839,8 +873,8 @@ calling fit()</dd>
         self.quantize_type = quantize_type
         self.eps = eps
         self.verbose = verbose
-        self.temp_dir = &#34;zed_temp&#34;
-        self.PFSA_prop_titles =  [&#34;%ANN_ERR&#34;, &#34;%MRG_EPS&#34;, &#34;%SYN_STR&#34;, &#34;%SYM_FRQ&#34;, &#34;%PITILDE&#34;, &#34;%CONNX&#34;]
+        self.temp_dir = &#39;zed_temp&#39;
+        self.PFSA_prop_titles =  [&#39;%ANN_ERR&#39;, &#39;%MRG_EPS&#39;, &#39;%SYN_STR&#39;, &#39;%SYM_FRQ&#39;, &#39;%PITILDE&#39;, &#39;%CONNX&#39;]
 
         # values calculated in self.fit()
         self.fitted = False                # whether model has been fit
@@ -858,6 +892,7 @@ calling fit()</dd>
         # can be accessed after calling self.predict()
         self.cluster_llks = None           # list of llk of each prediction for each cluster
         self.closest_match = None          # cluster label of closest match for each prediction
+        self.predicted_active_pfsas = {}   # dictionary of each pfsa active at each unit of time in the sequence
 
 
     def fit(self, X, y=None):
@@ -898,7 +933,7 @@ calling fit()</dd>
         &#34;&#34;&#34;
 
         if not self.fitted:
-            raise ValueError(&#34;Model has not been fit yet&#34;)
+            raise ValueError(&#34;Model has not been fit yet.&#34;)
 
         data = None
         num_predictions = 0
@@ -907,16 +942,27 @@ calling fit()</dd>
             # occurs when model is loaded from file
             if self.quantized_data is None:
                 raise ValueError(&#34;Original data not found. Pass data to predict().&#34;)
-            data = self.quantized_data.drop(columns=[&#34;cluster&#34;], axis=1)
+            data = self.quantized_data.drop(columns=[&#39;cluster&#39;], axis=1, errors=&#39;ignore&#39;)
+            # data.to_csv(&#39;error.csv&#39;, sep=&#39; &#39;, index=False, header=False)
             num_predictions = self.quantized_data.shape[0]
         else:
             data = self.__quantize(X)
             num_predictions = 1 if type(X) is pd.Series else data.shape[0]
 
-        cluster_llks = np.empty(shape=(self.n_clusters, num_predictions), dtype=np.float32)
+        cluster_llks = np.zeros(shape=(self.n_clusters, num_predictions), dtype=np.float32)
+
+        def count_clusters(row):
+            clusters = np.bincount(row)
+            return clusters.size
+        data[&#39;alphabet_size&#39;] = data.apply(count_clusters, axis=1)
+
         for i in range(self.n_clusters):
-            # cluster_llks[i] = np.asarray(Llk(data=data, pfsafile=self.cluster_PFSA_files[i]).run(), dtype=np.float32)
-            llks = Llk(data=data, pfsafile=self.cluster_PFSA_files[i]).run()
+            curr_alphabet_size = len(self.cluster_PFSA_info[i][&#39;%SYM_FRQ&#39;])
+            curr_data = data[data[&#39;alphabet_size&#39;] &lt;= curr_alphabet_size].drop(columns=[&#39;alphabet_size&#39;], axis=1)
+            llks = Llk(data=curr_data, pfsafile=self.cluster_PFSA_files[i]).run()
+            llks = pd.concat(
+                [data[0], pd.DataFrame(llks, index=curr_data.index, columns=[&#39;llks&#39;])], axis=1
+            ).fillna(float(&#39;inf&#39;))[&#39;llks&#39;].values.tolist()
             cluster_llks[i] = np.asarray(llks, dtype=np.float32)
 
         # consider to be anomaly if all llks above specified upper bound (X standard deviations above the mean)
@@ -925,14 +971,20 @@ calling fit()</dd>
 
         self.cluster_llks = cluster_llks
         self.closest_match = np.argmin(cluster_llks, axis=0)
+        self.predicted_active_pfsas = {}
+        for i, pfsa in enumerate(self.closest_match):
+            if pfsa in self.predicted_active_pfsas:
+                self.predicted_active_pfsas[pfsa].append(i)
+            else:
+                self.predicted_active_pfsas[pfsa] = [i]
 
         if len(predictions) == 1:
-            predictions = predictions[0]
+            return predictions[0]
 
         return predictions
 
 
-    def save_model(self, path=&#34;patternly_model.dill&#34;):
+    def save_model(self, path=&#39;patternly_model.dill&#39;):
         &#34;&#34;&#34; Save model to file
 
         Args:
@@ -940,37 +992,37 @@ calling fit()</dd>
         &#34;&#34;&#34;
 
         if not self.fitted:
-            raise ValueError(&#34;Model has not been fit yet&#34;)
+            raise ValueError(&#34;Model has not been fit yet.&#34;)
 
         metadata = {
-            &#34;modeltype&#34;: type(self),
-            &#34;user_params&#34;: {
-                &#34;anomaly_sensitivity&#34;: self.anomaly_sensitivity,
-                &#34;n_clusters&#34;: self.n_clusters,
-                &#34;reduce_clusters&#34;: self.reduce_clusters,
-                &#34;clustering_alg&#34;: self.clustering_alg,
-                &#34;quantize&#34;: self.quantize,
-                &#34;quantize_type&#34;: self.quantize_type,
-                &#34;eps&#34;: self.eps,
-                &#34;verbose&#34;: self.verbose,
+            &#39;modeltype&#39;: type(self),
+            &#39;user_params&#39;: {
+                &#39;anomaly_sensitivity&#39;: self.anomaly_sensitivity,
+                &#39;n_clusters&#39;: self.n_clusters,
+                &#39;reduce_clusters&#39;: self.reduce_clusters,
+                &#39;clustering_alg&#39;: self.clustering_alg,
+                &#39;quantize&#39;: self.quantize,
+                &#39;quantize_type&#39;: self.quantize_type,
+                &#39;eps&#39;: self.eps,
+                &#39;verbose&#39;: self.verbose,
             },
-            &#34;fitted_params&#34;: {
-                &#34;quantizer_parameters&#34;: None if self.quantizer is None else self.quantizer.parameters ,
-                &#34;quantizer_feature_order&#34;: None if self.quantizer is None else self.quantizer._feature_order,
-                &#34;cluster_labels&#34;: self.cluster_labels,
-                &#34;cluster_counts&#34;: self.cluster_counts,
-                &#34;cluster_PFSA_info&#34;: self.cluster_PFSA_info,
-                &#34;PFSA_llk_means&#34;: self.PFSA_llk_means.tolist(),
-                &#34;PFSA_llk_stds&#34;: self.PFSA_llk_stds.tolist()
+            &#39;fitted_params&#39;: {
+                &#39;quantizer_parameters&#39;: None if self.quantizer is None else self.quantizer.parameters ,
+                &#39;quantizer_feature_order&#39;: None if self.quantizer is None else self.quantizer._feature_order,
+                &#39;cluster_labels&#39;: self.cluster_labels,
+                &#39;cluster_counts&#39;: self.cluster_counts,
+                &#39;cluster_PFSA_info&#39;: self.cluster_PFSA_info,
+                &#39;PFSA_llk_means&#39;: self.PFSA_llk_means.tolist(),
+                &#39;PFSA_llk_stds&#39;: self.PFSA_llk_stds.tolist()
             }
         }
 
-        with open(path, &#34;wb&#34;) as f:
+        with open(path, &#39;wb&#39;) as f:
             dill.dump(metadata, f)
 
 
     @staticmethod
-    def load_model(path=&#34;patternly_model.dill&#34;):
+    def load_model(path=&#39;patternly_model.dill&#39;):
         &#34;&#34;&#34; Load saved model
 
             Args:
@@ -980,24 +1032,24 @@ calling fit()</dd>
                 AnomalyDetection or StreamingDetection: loaded model
         &#34;&#34;&#34;
 
-        with open(path, &#34;rb&#34;) as f:
+        with open(path, &#39;rb&#39;) as f:
             metadata = dill.load(f)
 
         model = None
-        if metadata[&#34;modeltype&#34;] is AnomalyDetection:
-            model = AnomalyDetection(**metadata[&#34;user_params&#34;])
+        if metadata[&#39;modeltype&#39;] is AnomalyDetection:
+            model = AnomalyDetection(**metadata[&#39;user_params&#39;])
         else:
-            model = StreamingDetection(**metadata[&#34;user_params&#34;])
+            model = StreamingDetection(**metadata[&#39;user_params&#39;])
 
-        if model.quantize and model.quantize_type == &#34;complex&#34;:
+        if model.quantize and model.quantize_type == &#39;complex&#39;:
             model.quantizer = Quantizer(n_quantizations=1, eps=-1)
-            model.quantizer.parameters = metadata[&#34;fitted_params&#34;][&#34;quantizer_parameters&#34;]
-            model.quantizer._feature_order = metadata[&#34;fitted_params&#34;][&#34;quantizer_feature_order&#34;]
-        model.cluster_labels = metadata[&#34;fitted_params&#34;][&#34;cluster_labels&#34;]
-        model.cluster_counts = metadata[&#34;fitted_params&#34;][&#34;cluster_counts&#34;]
-        model.cluster_PFSA_info = metadata[&#34;fitted_params&#34;][&#34;cluster_PFSA_info&#34;]
-        model.PFSA_llk_means = np.asarray(metadata[&#34;fitted_params&#34;][&#34;PFSA_llk_means&#34;])
-        model.PFSA_llk_stds = np.asarray(metadata[&#34;fitted_params&#34;][&#34;PFSA_llk_stds&#34;])
+            model.quantizer.parameters = metadata[&#39;fitted_params&#39;][&#39;quantizer_parameters&#39;]
+            model.quantizer._feature_order = metadata[&#39;fitted_params&#39;][&#39;quantizer_feature_order&#39;]
+        model.cluster_labels = metadata[&#39;fitted_params&#39;][&#39;cluster_labels&#39;]
+        model.cluster_counts = metadata[&#39;fitted_params&#39;][&#39;cluster_counts&#39;]
+        model.cluster_PFSA_info = metadata[&#39;fitted_params&#39;][&#39;cluster_PFSA_info&#39;]
+        model.PFSA_llk_means = np.asarray(metadata[&#39;fitted_params&#39;][&#39;PFSA_llk_means&#39;])
+        model.PFSA_llk_stds = np.asarray(metadata[&#39;fitted_params&#39;][&#39;PFSA_llk_stds&#39;])
         # print(model.PFSA_llk_means)
         # print(model.PFSA_llk_stds)
 
@@ -1005,8 +1057,8 @@ calling fit()</dd>
         model.cluster_PFSA_files = []
         for i in range(model.n_clusters):
             model.cluster_PFSA_files.append(RANDOM_NAME(path=model.temp_dir))
-            with open(model.cluster_PFSA_files[i], &#34;w&#34;) as f:
-                f.write(f&#34;{model.__format_PFSA_info(model.cluster_PFSA_info[i])}&#34;)
+            with open(model.cluster_PFSA_files[i], &#39;w&#39;) as f:
+                f.write(f&#39;{model.__format_PFSA_info(model.cluster_PFSA_info[i])}&#39;)
                 # print(model.__format_PFSA_info(model.cluster_PFSA_info[i]))
         # model.generate_PFSA_pngs()
 
@@ -1019,7 +1071,7 @@ calling fit()</dd>
         &#34;&#34;&#34; Print PFSAs found for each cluster &#34;&#34;&#34;
 
         if not self.fitted:
-            raise ValueError(&#34;Model has not been fit yet&#34;)
+            raise ValueError(&#34;Model has not been fit yet.&#34;)
 
         for i in range(self.n_clusters):
             print(f&#34;Cluster {i} PFSA:&#34;)
@@ -1058,15 +1110,15 @@ calling fit()</dd>
         if type(X) is pd.Series:
             X = X.copy().to_frame().reset_index(drop=True).T
 
-        if self.quantize_type == &#34;simple&#34;:
+        if self.quantize_type == &#39;simple&#39;:
             # basic differentiation
             X = X.astype(float).diff(axis=1).fillna(0)
             return X.apply(lambda row : row.apply(lambda n : 1 if n &gt; 0 else 0), axis=1)
-        elif self.quantize_type == &#34;simple-second&#34;:
+        elif self.quantize_type == &#39;simple-second&#39;:
             # second derivative
             X = X.astype(float).diff(axis=1).fillna(0).diff(axis=1).fillna(0)
             return X.apply(lambda row : row.apply(lambda n : 1 if n &gt; 0 else 0), axis=1)
-        elif self.quantize_type == &#34;complex&#34;:
+        elif self.quantize_type == &#39;complex&#39;:
             # use cythonized quantizer binary
             if not self.fitted:
                 self.quantizer = Quantizer(n_quantizations=1, epsilon=-1)
@@ -1090,7 +1142,7 @@ calling fit()</dd>
             self.dist_matrix = self.quantized_data
         else:
             self.dist_matrix = pd.DataFrame(
-                Lsmash(data=self.quantized_data, data_type=&#34;symbolic&#34;, sae=False).run(),
+                Lsmash(data=self.quantized_data, data_type=&#39;symbolic&#39;, sae=False).run(),
                 dtype=np.float32
             )
 
@@ -1119,10 +1171,23 @@ calling fit()</dd>
         cluster_labels = [cluster_rank[cluster] for cluster in cluster_labels]
         cluster_counts = [cluster_counts[cluster] for cluster in np.argsort(cluster_counts)][::-1]
 
+        # def adjust_clusters(row):
+        #     bins = np.bincount(row)
+        #     offset = [0 for _ in range(len(bins))]
+        #     preceeding_zeros = 0
+        #     for i, bin in enumerate(bins):
+        #         if bin == 0:
+        #             preceeding_zeros += 1
+        #         offset[i] = preceeding_zeros
+        #     return row.apply(lambda val: val - offset[val])
+        # self.quantized_data = self.quantized_data.apply(adjust_clusters, axis=1)
+
         self.n_clusters = n_clusters
         self.cluster_counts = cluster_counts
         self.cluster_labels = cluster_labels
-        self.quantized_data[&#34;cluster&#34;] = cluster_labels
+        self.quantized_data[&#39;cluster&#39;] = cluster_labels
+        # self.quantized_data[&#39;alphabet_size&#39;] = self.quantized_data.apply(count_clusters, axis=1)
+        # self.quantized_data[self.quantized_data[&#39;cluster&#39;] == 0].to_csv(&#39;firstcluster.csv&#39;, sep=&#39; &#39;, header=False, index=False)
 
 
     def __calculate_cluster_PFSAs(self):
@@ -1133,7 +1198,9 @@ calling fit()</dd>
         for i in range(self.n_clusters):
             if self.verbose:
                 print(f&#34;Generating cluster PFSA {i + 1}/{self.n_clusters}...&#34;)
-            cluster_data = self.quantized_data[self.quantized_data[&#34;cluster&#34;] == i].drop(columns=[&#34;cluster&#34;], axis=1)
+            cluster_data = self.quantized_data[self.quantized_data[&#39;cluster&#39;] == i].drop(
+                columns=[&#39;cluster&#39;], axis=1
+            )
             cluster_PFSA_file = RANDOM_NAME(path=self.temp_dir)
             dot_file = RANDOM_NAME(path=self.temp_dir)
             cluster_PFSA_files.append(cluster_PFSA_file)
@@ -1141,11 +1208,12 @@ calling fit()</dd>
             alg = GenESeSS(
                 data=cluster_data,
                 outfile=cluster_PFSA_file,
-                data_type=&#34;symbolic&#34;,
-                data_dir=&#34;row&#34;,
+                data_type=&#39;symbolic&#39;,
+                data_dir=&#39;row&#39;,
                 force=True,
                 eps=self.eps,
                 dot=dot_file,
+                configfile=&#39;./patternly/config.cfg&#39;
             )
             # TODO: add error handling for when genESeSS fails to find a PFSA
             PFSA_found = alg.run()
@@ -1177,22 +1245,23 @@ calling fit()</dd>
         if self.verbose:
             print(&#34;Attempting to reduce clusters...&#34;)
 
-        # generate representative sequences for each cluster PFSA
-        #  seq_len = 1000
-        #  seqs_per_pfsa = 100
-        #  all_clusters_seqs = [
-            #  Prun(pfsafile=pfsa, data_len=seq_len, num_repeats=seqs_per_pfsa).run()
-            #  for pfsa in self.cluster_PFSA_files
-        #  ]
-
         all_cluster_likelihoods = np.empty(shape=(self.n_clusters, self.n_clusters), dtype=np.float32)
         all_ranked_likelihoods = np.empty(shape=(self.n_clusters, self.n_clusters), dtype=np.int32)
 
         for i in range(self.n_clusters):
             cluster_llks = []
-            for pfsafile in self.cluster_PFSA_files:
-                cluster_data = self.quantized_data[self.quantized_data[&#34;cluster&#34;] == i].drop(columns=[&#34;cluster&#34;], axis=1)
-                cluster_llks.append(np.asarray(Llk(data=cluster_data, pfsafile=pfsafile).run(), dtype=np.float32))
+            for j in range(self.n_clusters):
+                curr_alphabet_size = len(self.cluster_PFSA_info[j][&#39;%SYM_FRQ&#39;])
+                cluster_data = self.quantized_data[self.quantized_data[&#39;cluster&#39;] == i]
+                curr_data = cluster_data
+                # curr_data = cluster_data[cluster_data[&#39;alphabet_size&#39;] &lt;= curr_alphabet_size].drop(
+                    # columns=[&#39;cluster&#39;, &#39;alphabet_size&#39;], axis=1
+                # )
+                llks = [] if curr_data.shape[0] == 0 else Llk(data=curr_data, pfsafile=self.cluster_PFSA_files[j]).run()
+                # llks = pd.concat(
+                    # [cluster_data[0], pd.DataFrame(llks, index=curr_data.index, columns=[&#39;llks&#39;])], axis=1
+                # ).fillna(float(&#39;inf&#39;))[&#39;llks&#39;].values.tolist()
+                cluster_llks.append(np.asarray(llks, dtype=np.float32))
 
             # which cluster PFSA each sequence most likely maps back to
             closest_matches = np.argmin(cluster_llks, axis=0)
@@ -1200,12 +1269,14 @@ calling fit()</dd>
             cluster_likelihoods = np.count_nonzero(
                 (closest_matches.reshape(-1, 1) == np.arange(self.n_clusters).reshape(1, -1)),
                 axis=0
-            ) / self.quantized_data[self.quantized_data[&#34;cluster&#34;] == i].shape[0]
+            ) 
+            cluster_likelihoods = cluster_likelihoods / cluster_likelihoods.sum()
             # list of cluster PFSAs sorted in descending order of likelihood
             ranked_likelihoods = np.argsort(cluster_likelihoods)[::-1]
 
             all_cluster_likelihoods[i] = cluster_likelihoods
             all_ranked_likelihoods[i] = ranked_likelihoods
+            # print(all_cluster_likelihoods)
 
         for i in range(self.n_clusters):
             best_match = all_ranked_likelihoods[i][0]
@@ -1221,7 +1292,7 @@ calling fit()</dd>
             self.n_clusters = new_n_clusters
             #  reduced_clusters = set(graph.roots)
             #  self.cluster_labels = [graph.roots[cluster] for cluster in self.cluster_labels]
-            #  self.quantized_data[&#34;cluster&#34;] = self.cluster_labels
+            #  self.quantized_data[&#39;cluster&#39;] = self.cluster_labels
             #  self.cluster_PFSA_files = [self.cluster_PFSA_files[i] for i in reduced_clusters]
             #  self.cluster_PFSA_info = [self.cluster_PFSA_info[i] for i in reduced_clusters]
             #  self.cluster_PFSA_pngs = [self.cluster_PFSA_pngs[i] for i in reduced_clusters]
@@ -1245,10 +1316,21 @@ calling fit()</dd>
         PFSA_llk_means = np.empty(shape=self.n_clusters)
         PFSA_llk_stds = np.empty(shape=self.n_clusters)
         for i in range(self.n_clusters):
-            cluster_data = self.quantized_data[self.quantized_data[&#34;cluster&#34;] == i].drop(columns=[&#34;cluster&#34;], axis=1)
+            cluster_data = self.quantized_data[self.quantized_data[&#39;cluster&#39;] == i].drop(
+                columns=[&#39;cluster&#39;], axis=1
+            )
             llks = np.asarray(Llk(data=cluster_data, pfsafile=self.cluster_PFSA_files[i]).run(), dtype=np.float32)
             PFSA_llk_means[i] = np.mean(llks)
             PFSA_llk_stds[i] = np.std(llks, ddof=1)
+
+        # for i in range(self.n_clusters):
+        #     curr_alphabet_size = len(self.cluster_PFSA_info[i][&#39;%SYM_FRQ&#39;])
+        #     curr_data = data[data[&#39;alphabet_size&#39;] &lt;= curr_alphabet_size].drop(columns=[&#39;cluster&#39;, &#39;alphabet_size&#39;], axis=1)
+        #     llks = Llk(data=curr_data, pfsafile=self.cluster_PFSA_files[i]).run()
+        #     llks = pd.concat(
+        #         [data[0], pd.DataFrame(llks, index=curr_data.index, columns=[&#39;llks&#39;])], axis=1
+        #     ).fillna(float(&#39;inf&#39;))[&#39;llks&#39;].values.tolist()
+        #     cluster_llks[i] = np.asarray(llks, dtype=np.float32)
 
         self.PFSA_llk_means, self.PFSA_llk_stds = PFSA_llk_means, PFSA_llk_stds
 
@@ -1264,29 +1346,29 @@ calling fit()</dd>
                 str: formatted PFSA information
         &#34;&#34;&#34;
 
-        indent = indent_level * &#34; &#34;
+        indent = indent_level * &#39; &#39;
 
-        syn_str_vals = &#34;&#34;
-        if PFSA_info[&#34;%SYN_STR&#34;] is not None:
-            for syn_str in PFSA_info[&#34;%SYN_STR&#34;]:
-                syn_str_vals += (f&#34;{syn_str} &#34;)
+        syn_str_vals = &#39;&#39;
+        if PFSA_info[&#39;%SYN_STR&#39;] is not None:
+            for syn_str in PFSA_info[&#39;%SYN_STR&#39;]:
+                syn_str_vals += (f&#39;{syn_str} &#39;)
 
-        sym_frq_vals = &#34;&#34;
-        for sym_frq in PFSA_info[&#34;%SYM_FRQ&#34;]:
-            sym_frq_vals += (f&#34;{sym_frq} &#34;)
+        sym_frq_vals = &#39;&#39;
+        for sym_frq in PFSA_info[&#39;%SYM_FRQ&#39;]:
+            sym_frq_vals += (f&#39;{sym_frq} &#39;)
 
         pitilde_vals = indent
-        for row in PFSA_info[&#34;%PITILDE&#34;]:
+        for row in PFSA_info[&#39;%PITILDE&#39;]:
             for i, val in enumerate(row):
-                suffix = &#34; &#34; if (i+1) &lt; len(row) else f&#34; \n{indent}&#34;
-                pitilde_vals += (f&#34;{val}{suffix}&#34;)
+                suffix = &#39; &#39; if (i+1) &lt; len(row) else f&#39; \n{indent}&#39;
+                pitilde_vals += (f&#39;{val}{suffix}&#39;)
         pitilde_vals = pitilde_vals[:-len(indent)] if indent_level &gt; 0 else pitilde_vals
 
         connx_vals = indent
-        for row in PFSA_info[&#34;%CONNX&#34;]:
+        for row in PFSA_info[&#39;%CONNX&#39;]:
             for i, val in enumerate(row):
-                suffix = &#34; &#34; if (i+1) &lt; len(row) else f&#34; \n{indent}&#34;
-                connx_vals += (f&#34;{val}{suffix}&#34;)
+                suffix = &#39; &#39; if (i+1) &lt; len(row) else f&#39; \n{indent}&#39;
+                connx_vals += (f&#39;{val}{suffix}&#39;)
         connx_vals = connx_vals[:-len(indent)] if indent_level &gt; 0 else connx_vals
 
         return (
@@ -1326,7 +1408,7 @@ calling fit()</dd>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">@staticmethod
-def load_model(path=&#34;patternly_model.dill&#34;):
+def load_model(path=&#39;patternly_model.dill&#39;):
     &#34;&#34;&#34; Load saved model
 
         Args:
@@ -1336,24 +1418,24 @@ def load_model(path=&#34;patternly_model.dill&#34;):
             AnomalyDetection or StreamingDetection: loaded model
     &#34;&#34;&#34;
 
-    with open(path, &#34;rb&#34;) as f:
+    with open(path, &#39;rb&#39;) as f:
         metadata = dill.load(f)
 
     model = None
-    if metadata[&#34;modeltype&#34;] is AnomalyDetection:
-        model = AnomalyDetection(**metadata[&#34;user_params&#34;])
+    if metadata[&#39;modeltype&#39;] is AnomalyDetection:
+        model = AnomalyDetection(**metadata[&#39;user_params&#39;])
     else:
-        model = StreamingDetection(**metadata[&#34;user_params&#34;])
+        model = StreamingDetection(**metadata[&#39;user_params&#39;])
 
-    if model.quantize and model.quantize_type == &#34;complex&#34;:
+    if model.quantize and model.quantize_type == &#39;complex&#39;:
         model.quantizer = Quantizer(n_quantizations=1, eps=-1)
-        model.quantizer.parameters = metadata[&#34;fitted_params&#34;][&#34;quantizer_parameters&#34;]
-        model.quantizer._feature_order = metadata[&#34;fitted_params&#34;][&#34;quantizer_feature_order&#34;]
-    model.cluster_labels = metadata[&#34;fitted_params&#34;][&#34;cluster_labels&#34;]
-    model.cluster_counts = metadata[&#34;fitted_params&#34;][&#34;cluster_counts&#34;]
-    model.cluster_PFSA_info = metadata[&#34;fitted_params&#34;][&#34;cluster_PFSA_info&#34;]
-    model.PFSA_llk_means = np.asarray(metadata[&#34;fitted_params&#34;][&#34;PFSA_llk_means&#34;])
-    model.PFSA_llk_stds = np.asarray(metadata[&#34;fitted_params&#34;][&#34;PFSA_llk_stds&#34;])
+        model.quantizer.parameters = metadata[&#39;fitted_params&#39;][&#39;quantizer_parameters&#39;]
+        model.quantizer._feature_order = metadata[&#39;fitted_params&#39;][&#39;quantizer_feature_order&#39;]
+    model.cluster_labels = metadata[&#39;fitted_params&#39;][&#39;cluster_labels&#39;]
+    model.cluster_counts = metadata[&#39;fitted_params&#39;][&#39;cluster_counts&#39;]
+    model.cluster_PFSA_info = metadata[&#39;fitted_params&#39;][&#39;cluster_PFSA_info&#39;]
+    model.PFSA_llk_means = np.asarray(metadata[&#39;fitted_params&#39;][&#39;PFSA_llk_means&#39;])
+    model.PFSA_llk_stds = np.asarray(metadata[&#39;fitted_params&#39;][&#39;PFSA_llk_stds&#39;])
     # print(model.PFSA_llk_means)
     # print(model.PFSA_llk_stds)
 
@@ -1361,8 +1443,8 @@ def load_model(path=&#34;patternly_model.dill&#34;):
     model.cluster_PFSA_files = []
     for i in range(model.n_clusters):
         model.cluster_PFSA_files.append(RANDOM_NAME(path=model.temp_dir))
-        with open(model.cluster_PFSA_files[i], &#34;w&#34;) as f:
-            f.write(f&#34;{model.__format_PFSA_info(model.cluster_PFSA_info[i])}&#34;)
+        with open(model.cluster_PFSA_files[i], &#39;w&#39;) as f:
+            f.write(f&#39;{model.__format_PFSA_info(model.cluster_PFSA_info[i])}&#39;)
             # print(model.__format_PFSA_info(model.cluster_PFSA_info[i]))
     # model.generate_PFSA_pngs()
 
@@ -1484,7 +1566,7 @@ predicts on original data (Default = None)</dd>
     &#34;&#34;&#34;
 
     if not self.fitted:
-        raise ValueError(&#34;Model has not been fit yet&#34;)
+        raise ValueError(&#34;Model has not been fit yet.&#34;)
 
     data = None
     num_predictions = 0
@@ -1493,16 +1575,27 @@ predicts on original data (Default = None)</dd>
         # occurs when model is loaded from file
         if self.quantized_data is None:
             raise ValueError(&#34;Original data not found. Pass data to predict().&#34;)
-        data = self.quantized_data.drop(columns=[&#34;cluster&#34;], axis=1)
+        data = self.quantized_data.drop(columns=[&#39;cluster&#39;], axis=1, errors=&#39;ignore&#39;)
+        # data.to_csv(&#39;error.csv&#39;, sep=&#39; &#39;, index=False, header=False)
         num_predictions = self.quantized_data.shape[0]
     else:
         data = self.__quantize(X)
         num_predictions = 1 if type(X) is pd.Series else data.shape[0]
 
-    cluster_llks = np.empty(shape=(self.n_clusters, num_predictions), dtype=np.float32)
+    cluster_llks = np.zeros(shape=(self.n_clusters, num_predictions), dtype=np.float32)
+
+    def count_clusters(row):
+        clusters = np.bincount(row)
+        return clusters.size
+    data[&#39;alphabet_size&#39;] = data.apply(count_clusters, axis=1)
+
     for i in range(self.n_clusters):
-        # cluster_llks[i] = np.asarray(Llk(data=data, pfsafile=self.cluster_PFSA_files[i]).run(), dtype=np.float32)
-        llks = Llk(data=data, pfsafile=self.cluster_PFSA_files[i]).run()
+        curr_alphabet_size = len(self.cluster_PFSA_info[i][&#39;%SYM_FRQ&#39;])
+        curr_data = data[data[&#39;alphabet_size&#39;] &lt;= curr_alphabet_size].drop(columns=[&#39;alphabet_size&#39;], axis=1)
+        llks = Llk(data=curr_data, pfsafile=self.cluster_PFSA_files[i]).run()
+        llks = pd.concat(
+            [data[0], pd.DataFrame(llks, index=curr_data.index, columns=[&#39;llks&#39;])], axis=1
+        ).fillna(float(&#39;inf&#39;))[&#39;llks&#39;].values.tolist()
         cluster_llks[i] = np.asarray(llks, dtype=np.float32)
 
     # consider to be anomaly if all llks above specified upper bound (X standard deviations above the mean)
@@ -1511,9 +1604,15 @@ predicts on original data (Default = None)</dd>
 
     self.cluster_llks = cluster_llks
     self.closest_match = np.argmin(cluster_llks, axis=0)
+    self.predicted_active_pfsas = {}
+    for i, pfsa in enumerate(self.closest_match):
+        if pfsa in self.predicted_active_pfsas:
+            self.predicted_active_pfsas[pfsa].append(i)
+        else:
+            self.predicted_active_pfsas[pfsa] = [i]
 
     if len(predictions) == 1:
-        predictions = predictions[0]
+        return predictions[0]
 
     return predictions</code></pre>
 </details>
@@ -1531,7 +1630,7 @@ predicts on original data (Default = None)</dd>
     &#34;&#34;&#34; Print PFSAs found for each cluster &#34;&#34;&#34;
 
     if not self.fitted:
-        raise ValueError(&#34;Model has not been fit yet&#34;)
+        raise ValueError(&#34;Model has not been fit yet.&#34;)
 
     for i in range(self.n_clusters):
         print(f&#34;Cluster {i} PFSA:&#34;)
@@ -1552,7 +1651,7 @@ predicts on original data (Default = None)</dd>
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def save_model(self, path=&#34;patternly_model.dill&#34;):
+<pre><code class="python">def save_model(self, path=&#39;patternly_model.dill&#39;):
     &#34;&#34;&#34; Save model to file
 
     Args:
@@ -1560,36 +1659,281 @@ predicts on original data (Default = None)</dd>
     &#34;&#34;&#34;
 
     if not self.fitted:
-        raise ValueError(&#34;Model has not been fit yet&#34;)
+        raise ValueError(&#34;Model has not been fit yet.&#34;)
 
     metadata = {
-        &#34;modeltype&#34;: type(self),
-        &#34;user_params&#34;: {
-            &#34;anomaly_sensitivity&#34;: self.anomaly_sensitivity,
-            &#34;n_clusters&#34;: self.n_clusters,
-            &#34;reduce_clusters&#34;: self.reduce_clusters,
-            &#34;clustering_alg&#34;: self.clustering_alg,
-            &#34;quantize&#34;: self.quantize,
-            &#34;quantize_type&#34;: self.quantize_type,
-            &#34;eps&#34;: self.eps,
-            &#34;verbose&#34;: self.verbose,
+        &#39;modeltype&#39;: type(self),
+        &#39;user_params&#39;: {
+            &#39;anomaly_sensitivity&#39;: self.anomaly_sensitivity,
+            &#39;n_clusters&#39;: self.n_clusters,
+            &#39;reduce_clusters&#39;: self.reduce_clusters,
+            &#39;clustering_alg&#39;: self.clustering_alg,
+            &#39;quantize&#39;: self.quantize,
+            &#39;quantize_type&#39;: self.quantize_type,
+            &#39;eps&#39;: self.eps,
+            &#39;verbose&#39;: self.verbose,
         },
-        &#34;fitted_params&#34;: {
-            &#34;quantizer_parameters&#34;: None if self.quantizer is None else self.quantizer.parameters ,
-            &#34;quantizer_feature_order&#34;: None if self.quantizer is None else self.quantizer._feature_order,
-            &#34;cluster_labels&#34;: self.cluster_labels,
-            &#34;cluster_counts&#34;: self.cluster_counts,
-            &#34;cluster_PFSA_info&#34;: self.cluster_PFSA_info,
-            &#34;PFSA_llk_means&#34;: self.PFSA_llk_means.tolist(),
-            &#34;PFSA_llk_stds&#34;: self.PFSA_llk_stds.tolist()
+        &#39;fitted_params&#39;: {
+            &#39;quantizer_parameters&#39;: None if self.quantizer is None else self.quantizer.parameters ,
+            &#39;quantizer_feature_order&#39;: None if self.quantizer is None else self.quantizer._feature_order,
+            &#39;cluster_labels&#39;: self.cluster_labels,
+            &#39;cluster_counts&#39;: self.cluster_counts,
+            &#39;cluster_PFSA_info&#39;: self.cluster_PFSA_info,
+            &#39;PFSA_llk_means&#39;: self.PFSA_llk_means.tolist(),
+            &#39;PFSA_llk_stds&#39;: self.PFSA_llk_stds.tolist()
         }
     }
 
-    with open(path, &#34;wb&#34;) as f:
+    with open(path, &#39;wb&#39;) as f:
         dill.dump(metadata, f)</code></pre>
 </details>
 </dd>
 </dl>
+</dd>
+<dt id="patternly.detection.ContinuousStreamingDetection"><code class="flex name class">
+<span>class <span class="ident">ContinuousStreamingDetection</span></span>
+<span>(</span><span>**kwargs)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Tool for anomaly detection within a single continual data stream </p>
+<p>Args: see StreamingDetection</p></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">class ContinuousStreamingDetection(StreamingDetection):
+    &#34;&#34;&#34; Tool for anomaly detection within a single continual data stream &#34;&#34;&#34;
+
+    def __init__(self, **kwargs):
+        &#34;&#34;&#34;
+        Args: see StreamingDetection
+        &#34;&#34;&#34;
+
+        self.pattern_emergence_times = []
+        super().__init__(**kwargs)
+
+
+    def fit_stream(self, X, *, clean=True):
+        &#34;&#34;&#34; Fit new stream of data
+
+        Args:
+            X (pd.DataFrame or pd.Series): time series data stream to find anomalies
+            clean (bool, optional): whether to remove temp files (Default = True)
+
+        Returns:
+            ContinuousStreamingDetection: fitted model
+        &#34;&#34;&#34;
+
+        if X is None:
+            raise ValueError(&#34;Please pass data stream to fit.&#34;)
+
+        self.pattern_emergence_times = []
+        X_split_streams = self.split_streams(X, self.window_size, self.window_overlap)
+        data = self._AnomalyDetection__quantize(X_split_streams)
+        num_predictions = data.shape[0]
+
+        def count_clusters(row):
+            clusters = np.bincount(row)
+            return clusters.size
+        data[&#39;alphabet_size&#39;] = data.apply(count_clusters, axis=1)
+
+        # if not fitted with previous data, create a PFSA from first stream
+        if not self.fitted:
+            self.n_clusters = 0
+            self.fitted = True
+            self.__add_to_PFSA_library(data.iloc[0])
+            self.pattern_emergence_times.append(0)
+
+        cluster_llks = np.zeros(shape=(self.n_clusters, num_predictions), dtype=np.float32)
+
+        for i, row in data.iterrows():
+            upper_bounds = self.PFSA_llk_means + (self.PFSA_llk_stds * self.anomaly_sensitivity)
+            for j in range(self.n_clusters):
+                curr_alphabet_size = len(self.cluster_PFSA_info[j][&#39;%SYM_FRQ&#39;])
+                if row[&#39;alphabet_size&#39;] &gt; curr_alphabet_size:
+                    cluster_llks[j][i] = float(&#39;inf&#39;)
+                    continue
+                cluster_llks[j][i] = Llk(data=[row.drop(index=[&#39;alphabet_size&#39;])], pfsafile=self.cluster_PFSA_files[j]).run()[0]
+
+            # consider to be anomaly if all llks above specified upper bound (X standard deviations above the mean)
+            # in this case, we create a new model based on the anomalous pattern
+            if np.all(cluster_llks.T[i] &gt; upper_bounds):
+                self.pattern_emergence_times.append(i)
+                # print(i)
+                self.__add_to_PFSA_library(row)
+                # print(i, self.n_clusters)
+                cluster_llks = np.append(cluster_llks, np.zeros((1, num_predictions))).reshape((self.n_clusters, num_predictions))
+                cluster_llks[self.n_clusters - 1][i] = Llk(data=[row.drop(index=[&#39;alphabet_size&#39;])], pfsafile=self.cluster_PFSA_files[self.n_clusters-1]).run()[0]
+
+        upper_bounds = self.PFSA_llk_means + (self.PFSA_llk_stds * self.anomaly_sensitivity)
+
+        self.cluster_llks = cluster_llks
+        # self.closest_match = np.argmin(cluster_llks, axis=0)
+        # self.predicted_active_pfsas = {}
+        # for i, pfsa in enumerate(self.closest_match):
+        #     if pfsa in self.predicted_active_pfsas:
+        #         self.predicted_active_pfsas[pfsa].append(i)
+        #     else:
+        #         self.predicted_active_pfsas[pfsa] = [i]
+
+        self.quantized_data = pd.concat([self.quantized_data, data.drop(columns=[&#39;alphabet_size&#39;])], axis=0).reset_index(drop=True)
+
+        return self
+
+
+    def __add_to_PFSA_library(self, data):
+        &#34;&#34;&#34; Infer PFSA from data using genESeSS and update the PFSA library &#34;&#34;&#34;
+
+        cluster_PFSA_file = RANDOM_NAME(path=self.temp_dir)
+        PFSA_png = RANDOM_NAME(path=self.temp_dir)
+        
+        alg = GenESeSS(
+            data=[data.drop(index=[&#39;alphabet_size&#39;])],
+            outfile=cluster_PFSA_file,
+            data_type=&#39;symbolic&#39;,
+            data_dir=&#39;row&#39;,
+            force=True,
+            eps=self.eps,
+            dot=PFSA_png,
+            configfile=&#39;./patternly/config.cfg&#39;
+        )
+
+        # TODO: add error handling for when genESeSS fails to find a PFSA
+        PFSA_found = alg.run()
+        if PFSA_found:
+            prop_vals = [
+                alg.inference_error,
+                alg.epsilon_used,
+                alg.synchronizing_string_found,
+                alg.symbol_frequency,
+                alg.probability_morph_matrix,
+                alg.connectivity_matrix,
+            ]
+            self.cluster_PFSA_info.append(dict(zip(self.PFSA_prop_titles, prop_vals)))
+        else:
+            raise ValueError(f&#34;Unable to find new PFSA for anomaly.&#34;)
+
+        self.cluster_PFSA_files.append(cluster_PFSA_file)
+        self.cluster_PFSA_pngs.append(PFSA_png)
+        self.n_clusters += 1
+
+        seqs = pd.DataFrame(Prun(pfsafile=cluster_PFSA_file, data_len=self.window_size, num_repeats=100).run())
+        new_data = pd.concat([pd.DataFrame(data.drop(index=[&#39;alphabet_size&#39;])).T, seqs], axis=0)
+        llks = np.asarray(Llk(data=new_data, pfsafile=self.cluster_PFSA_files[self.n_clusters-1]).run())
+        self.PFSA_llk_means = np.mean(llks)
+        self.PFSA_llk_stds = np.std(llks, ddof=1)</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="patternly.detection.StreamingDetection" href="#patternly.detection.StreamingDetection">StreamingDetection</a></li>
+<li><a title="patternly.detection.AnomalyDetection" href="#patternly.detection.AnomalyDetection">AnomalyDetection</a></li>
+</ul>
+<h3>Methods</h3>
+<dl>
+<dt id="patternly.detection.ContinuousStreamingDetection.fit_stream"><code class="name flex">
+<span>def <span class="ident">fit_stream</span></span>(<span>self, X, *, clean=True)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Fit new stream of data</p>
+<h2 id="args">Args</h2>
+<dl>
+<dt><strong><code>X</code></strong> :&ensp;<code>pd.DataFrame</code> or <code>pd.Series</code></dt>
+<dd>time series data stream to find anomalies</dd>
+<dt><strong><code>clean</code></strong> :&ensp;<code>bool</code>, optional</dt>
+<dd>whether to remove temp files (Default = True)</dd>
+</dl>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code><a title="patternly.detection.ContinuousStreamingDetection" href="#patternly.detection.ContinuousStreamingDetection">ContinuousStreamingDetection</a></code></dt>
+<dd>fitted model</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def fit_stream(self, X, *, clean=True):
+    &#34;&#34;&#34; Fit new stream of data
+
+    Args:
+        X (pd.DataFrame or pd.Series): time series data stream to find anomalies
+        clean (bool, optional): whether to remove temp files (Default = True)
+
+    Returns:
+        ContinuousStreamingDetection: fitted model
+    &#34;&#34;&#34;
+
+    if X is None:
+        raise ValueError(&#34;Please pass data stream to fit.&#34;)
+
+    self.pattern_emergence_times = []
+    X_split_streams = self.split_streams(X, self.window_size, self.window_overlap)
+    data = self._AnomalyDetection__quantize(X_split_streams)
+    num_predictions = data.shape[0]
+
+    def count_clusters(row):
+        clusters = np.bincount(row)
+        return clusters.size
+    data[&#39;alphabet_size&#39;] = data.apply(count_clusters, axis=1)
+
+    # if not fitted with previous data, create a PFSA from first stream
+    if not self.fitted:
+        self.n_clusters = 0
+        self.fitted = True
+        self.__add_to_PFSA_library(data.iloc[0])
+        self.pattern_emergence_times.append(0)
+
+    cluster_llks = np.zeros(shape=(self.n_clusters, num_predictions), dtype=np.float32)
+
+    for i, row in data.iterrows():
+        upper_bounds = self.PFSA_llk_means + (self.PFSA_llk_stds * self.anomaly_sensitivity)
+        for j in range(self.n_clusters):
+            curr_alphabet_size = len(self.cluster_PFSA_info[j][&#39;%SYM_FRQ&#39;])
+            if row[&#39;alphabet_size&#39;] &gt; curr_alphabet_size:
+                cluster_llks[j][i] = float(&#39;inf&#39;)
+                continue
+            cluster_llks[j][i] = Llk(data=[row.drop(index=[&#39;alphabet_size&#39;])], pfsafile=self.cluster_PFSA_files[j]).run()[0]
+
+        # consider to be anomaly if all llks above specified upper bound (X standard deviations above the mean)
+        # in this case, we create a new model based on the anomalous pattern
+        if np.all(cluster_llks.T[i] &gt; upper_bounds):
+            self.pattern_emergence_times.append(i)
+            # print(i)
+            self.__add_to_PFSA_library(row)
+            # print(i, self.n_clusters)
+            cluster_llks = np.append(cluster_llks, np.zeros((1, num_predictions))).reshape((self.n_clusters, num_predictions))
+            cluster_llks[self.n_clusters - 1][i] = Llk(data=[row.drop(index=[&#39;alphabet_size&#39;])], pfsafile=self.cluster_PFSA_files[self.n_clusters-1]).run()[0]
+
+    upper_bounds = self.PFSA_llk_means + (self.PFSA_llk_stds * self.anomaly_sensitivity)
+
+    self.cluster_llks = cluster_llks
+    # self.closest_match = np.argmin(cluster_llks, axis=0)
+    # self.predicted_active_pfsas = {}
+    # for i, pfsa in enumerate(self.closest_match):
+    #     if pfsa in self.predicted_active_pfsas:
+    #         self.predicted_active_pfsas[pfsa].append(i)
+    #     else:
+    #         self.predicted_active_pfsas[pfsa] = [i]
+
+    self.quantized_data = pd.concat([self.quantized_data, data.drop(columns=[&#39;alphabet_size&#39;])], axis=0).reset_index(drop=True)
+
+    return self</code></pre>
+</details>
+</dd>
+</dl>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="patternly.detection.StreamingDetection" href="#patternly.detection.StreamingDetection">StreamingDetection</a></b></code>:
+<ul class="hlist">
+<li><code><a title="patternly.detection.StreamingDetection.fit" href="#patternly.detection.AnomalyDetection.fit">fit</a></code></li>
+<li><code><a title="patternly.detection.StreamingDetection.generate_PFSA_pngs" href="#patternly.detection.AnomalyDetection.generate_PFSA_pngs">generate_PFSA_pngs</a></code></li>
+<li><code><a title="patternly.detection.StreamingDetection.load_model" href="#patternly.detection.AnomalyDetection.load_model">load_model</a></code></li>
+<li><code><a title="patternly.detection.StreamingDetection.predict" href="#patternly.detection.AnomalyDetection.predict">predict</a></code></li>
+<li><code><a title="patternly.detection.StreamingDetection.print_PFSAs" href="#patternly.detection.AnomalyDetection.print_PFSAs">print_PFSAs</a></code></li>
+<li><code><a title="patternly.detection.StreamingDetection.save_model" href="#patternly.detection.AnomalyDetection.save_model">save_model</a></code></li>
+<li><code><a title="patternly.detection.StreamingDetection.split_streams" href="#patternly.detection.StreamingDetection.split_streams">split_streams</a></code></li>
+</ul>
+</li>
+</ul>
 </dd>
 <dt id="patternly.detection.StreamingDetection"><code class="flex name class">
 <span>class <span class="ident">StreamingDetection</span></span>
@@ -1640,16 +1984,16 @@ predicts on original data (Default = None)</dd>
             return super().predict(X_split_streams)
 
     
-    def save_model(self, path=&#34;patternly_model.dill&#34;):
+    def save_model(self, path=&#39;patternly_model.dill&#39;):
         super().save_model(path=path)
 
-        with open(path, &#34;rb&#34;) as f:
+        with open(path, &#39;rb&#39;) as f:
             metadata = dill.load(f)
 
-        metadata[&#34;user_params&#34;][&#34;window_size&#34;] = self.window_size
-        metadata[&#34;user_params&#34;][&#34;window_overlap&#34;] = self.window_overlap
+        metadata[&#39;user_params&#39;][&#39;window_size&#39;] = self.window_size
+        metadata[&#39;user_params&#39;][&#39;window_overlap&#39;] = self.window_overlap
 
-        with open(path, &#34;wb&#34;) as f:
+        with open(path, &#39;wb&#39;) as f:
             dill.dump(metadata, f)
 
 
@@ -1662,17 +2006,24 @@ predicts on original data (Default = None)</dd>
                 X (pd.Series): data to be split into streams
         &#34;&#34;&#34;
 
+        if type(X) is not pd.DataFrame:
+            X = pd.DataFrame(X)
+
         def beg(i): return int((window_size * i) - (window_overlap * i))
         def end(i): return int(beg(i) + window_size)
         size = int(X.shape[0] // (window_size - window_overlap))
         return pd.concat(
             [X[beg(i):end(i)].reset_index(drop=True) for i in range(size)],
             axis=1
-        ).T.reset_index(drop=True)</code></pre>
+        ).T.reset_index(drop=True).dropna(how=&#39;any&#39;, axis=0)</code></pre>
 </details>
 <h3>Ancestors</h3>
 <ul class="hlist">
 <li><a title="patternly.detection.AnomalyDetection" href="#patternly.detection.AnomalyDetection">AnomalyDetection</a></li>
+</ul>
+<h3>Subclasses</h3>
+<ul class="hlist">
+<li><a title="patternly.detection.ContinuousStreamingDetection" href="#patternly.detection.ContinuousStreamingDetection">ContinuousStreamingDetection</a></li>
 </ul>
 <h3>Static methods</h3>
 <dl>
@@ -1700,13 +2051,16 @@ def split_streams(X, window_size, window_overlap):
             X (pd.Series): data to be split into streams
     &#34;&#34;&#34;
 
+    if type(X) is not pd.DataFrame:
+        X = pd.DataFrame(X)
+
     def beg(i): return int((window_size * i) - (window_overlap * i))
     def end(i): return int(beg(i) + window_size)
     size = int(X.shape[0] // (window_size - window_overlap))
     return pd.concat(
         [X[beg(i):end(i)].reset_index(drop=True) for i in range(size)],
         axis=1
-    ).T.reset_index(drop=True)</code></pre>
+    ).T.reset_index(drop=True).dropna(how=&#39;any&#39;, axis=0)</code></pre>
 </details>
 </dd>
 </dl>
@@ -1750,6 +2104,12 @@ def split_streams(X, window_size, window_overlap):
 <li><code><a title="patternly.detection.AnomalyDetection.predict" href="#patternly.detection.AnomalyDetection.predict">predict</a></code></li>
 <li><code><a title="patternly.detection.AnomalyDetection.print_PFSAs" href="#patternly.detection.AnomalyDetection.print_PFSAs">print_PFSAs</a></code></li>
 <li><code><a title="patternly.detection.AnomalyDetection.save_model" href="#patternly.detection.AnomalyDetection.save_model">save_model</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="patternly.detection.ContinuousStreamingDetection" href="#patternly.detection.ContinuousStreamingDetection">ContinuousStreamingDetection</a></code></h4>
+<ul class="">
+<li><code><a title="patternly.detection.ContinuousStreamingDetection.fit_stream" href="#patternly.detection.ContinuousStreamingDetection.fit_stream">fit_stream</a></code></li>
 </ul>
 </li>
 <li>
