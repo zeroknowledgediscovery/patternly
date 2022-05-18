@@ -636,6 +636,7 @@ class ContinuousStreamingDetection(StreamingDetection):
         Args: see StreamingDetection
         """
 
+        self.pattern_emergence_times = []
         super().__init__(**kwargs)
 
 
@@ -653,6 +654,7 @@ class ContinuousStreamingDetection(StreamingDetection):
         if X is None:
             raise ValueError("Please pass data stream to fit.")
 
+        self.pattern_emergence_times = []
         X_split_streams = self.split_streams(X, self.window_size, self.window_overlap)
         data = self._AnomalyDetection__quantize(X_split_streams)
         num_predictions = data.shape[0]
@@ -667,6 +669,7 @@ class ContinuousStreamingDetection(StreamingDetection):
             self.n_clusters = 0
             self.fitted = True
             self.__add_to_PFSA_library(data.iloc[0])
+            self.pattern_emergence_times.append(0)
 
         cluster_llks = np.zeros(shape=(self.n_clusters, num_predictions), dtype=np.float32)
 
@@ -682,6 +685,8 @@ class ContinuousStreamingDetection(StreamingDetection):
             # consider to be anomaly if all llks above specified upper bound (X standard deviations above the mean)
             # in this case, we create a new model based on the anomalous pattern
             if np.all(cluster_llks.T[i] > upper_bounds):
+                self.pattern_emergence_times.append(i)
+                # print(i)
                 self.__add_to_PFSA_library(row)
                 # print(i, self.n_clusters)
                 cluster_llks = np.append(cluster_llks, np.zeros((1, num_predictions))).reshape((self.n_clusters, num_predictions))
