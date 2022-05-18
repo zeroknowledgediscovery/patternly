@@ -113,7 +113,7 @@ class DirectedGraph:
         self.size = size
         self.graph = defaultdict(set)
 
-    def from_matrix(self, matrix, threshold=0):
+    def from_matrix(self, matrix, threshold=0.0):
         if len(matrix) != len(matrix[0]):
             raise ValueError("Matrix must be square.")
 

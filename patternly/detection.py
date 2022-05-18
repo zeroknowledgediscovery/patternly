@@ -229,8 +229,6 @@ class AnomalyDetection:
         model.cluster_PFSA_info = metadata['fitted_params']['cluster_PFSA_info']
         model.PFSA_llk_means = np.asarray(metadata['fitted_params']['PFSA_llk_means'])
         model.PFSA_llk_stds = np.asarray(metadata['fitted_params']['PFSA_llk_stds'])
-        # print(model.PFSA_llk_means)
-        # print(model.PFSA_llk_stds)
 
         # write PFSA files
         model.cluster_PFSA_files = []
@@ -238,7 +236,6 @@ class AnomalyDetection:
             model.cluster_PFSA_files.append(RANDOM_NAME(path=model.temp_dir))
             with open(model.cluster_PFSA_files[i], 'w') as f:
                 f.write(f'{model.__format_PFSA_info(model.cluster_PFSA_info[i])}')
-                # print(model.__format_PFSA_info(model.cluster_PFSA_info[i]))
         # model.generate_PFSA_pngs()
 
         model.fitted = True
@@ -455,8 +452,8 @@ class AnomalyDetection:
 
             all_cluster_likelihoods[i] = cluster_likelihoods
             all_ranked_likelihoods[i] = ranked_likelihoods
-            # print(all_cluster_likelihoods)
 
+        new_n_clusters = self.n_clusters
         for i in range(self.n_clusters):
             best_match = all_ranked_likelihoods[i][0]
             if best_match != i:
@@ -686,9 +683,7 @@ class ContinuousStreamingDetection(StreamingDetection):
             # in this case, we create a new model based on the anomalous pattern
             if np.all(cluster_llks.T[i] > upper_bounds):
                 self.pattern_emergence_times.append(i)
-                # print(i)
                 self.__add_to_PFSA_library(row)
-                # print(i, self.n_clusters)
                 cluster_llks = np.append(cluster_llks, np.zeros((1, num_predictions))).reshape((self.n_clusters, num_predictions))
                 cluster_llks[self.n_clusters - 1][i] = Llk(data=[row.drop(index=['alphabet_size'])], pfsafile=self.cluster_PFSA_files[self.n_clusters-1]).run()[0]
 
