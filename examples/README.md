@@ -38,4 +38,18 @@ partitioned into sequences of uniform window length.
   PFSAs in the library, we construct a new PFSA and add it to the established library
   rather than marking these unknown sequences as anamolous.
 
+
+## Agitation Data
+
+From a study where patients wore wearable devices that contained accelerometer, heartrate,
+temperature, and electrodermal bloodflow sensors. This example demonstrates find a library
+of PFSAs of the raw data, then abstracting to find PFSAs of these PFSAs (i.e. finding 
+the pattern of patterns).
+
+## Sleep Data
+
+_Located in ```./data/sc4002e0.rec.edf```. The entire dataset can be downloaded
+from [physionet](https://physionet.org/content/sleep-edf/1.0.0/)._
+
+
 <!-- ## Test data and notebooks -->
