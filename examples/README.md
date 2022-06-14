@@ -52,4 +52,10 @@ _Located in ```./data/sc4002e0.rec.edf```. The entire dataset can be downloaded
 from [physionet](https://physionet.org/content/sleep-edf/1.0.0/)._
 
 
+## Dealing with .edf files
+
+Many of the EEG datasets from [physionet](https://physionet.org/content/) come in the
+European Data Format (EDF). ```Reading_european_data_format_(edf).ipynb``` demonstrates
+basic manipulation of .edf files to quickly obtain a pandas ```DataFrame```.
+
 <!-- ## Test data and notebooks -->
