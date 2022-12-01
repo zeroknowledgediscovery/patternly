@@ -56,17 +56,17 @@ class AnomalyDetection:
         self.PFSA_prop_titles =  ['%ANN_ERR', '%MRG_EPS', '%SYN_STR', '%SYM_FRQ', '%PITILDE', '%CONNX']
 
         # values calculated in self.fit()
-        self.fitted = False                # whether model has been fit
-        self.quantizer = None              # quantizer used for quantizing data
-        self.quantized_data = None         # quantized data
-        self.dist_matrix = pd.DataFrame()  # calculated by lsmash, used for clustering
-        self.cluster_labels = []           # list of cluster labels
-        self.cluster_counts = []           # number of instances in each cluster
-        self.cluster_PFSA_files = []       # list of file paths to cluster PFSAs
-        self.cluster_PFSA_info = []        # list of dicts of cluster PFSAs info for printing
-        self.cluster_PFSA_pngs = []        # list of file paths to PFSA pngs
-        self.PFSA_llk_means = []           # list of mean llk for each cluster
-        self.PFSA_llk_stds = []            # list of std of llk for each cluster
+        self.fitted = False                  # whether model has been fit
+        self.quantizer = None                # quantizer used for quantizing data
+        self.quantized_data = pd.DataFrame() # quantized data
+        self.dist_matrix = pd.DataFrame()    # calculated by lsmash, used for clustering
+        self.cluster_labels = []             # list of cluster labels
+        self.cluster_counts = []             # number of instances in each cluster
+        self.cluster_PFSA_files = []         # list of file paths to cluster PFSAs
+        self.cluster_PFSA_info = []          # list of dicts of cluster PFSAs info for printing
+        self.cluster_PFSA_pngs = []          # list of file paths to PFSA pngs
+        self.PFSA_llk_means = []             # list of mean llk for each cluster
+        self.PFSA_llk_stds = []              # list of std of llk for each cluster
 
         # can be accessed after calling self.predict()
         self.cluster_llks = None           # list of llk of each prediction for each cluster
@@ -114,7 +114,7 @@ class AnomalyDetection:
         if not self.fitted:
             raise ValueError("Model has not been fit yet.")
 
-        data = None
+        data = pd.DataFrame()
         num_predictions = 0
         # commonly want to find anomalies in original data
         if X is None:
@@ -330,8 +330,7 @@ class AnomalyDetection:
             print("Clustering distance matrix...")
 
         if self.n_clusters == 1:
-            self.cluster_labels = [0 for i in range(self.dist_matrix.shape[0])]
-
+            self.cluster_labels = [0 for _ in range(self.dist_matrix.shape[0])]
         cluster_labels = []
         if self.clustering_alg is None:
             cluster_labels = KMeans(n_clusters=self.n_clusters).fit(self.dist_matrix).labels_
@@ -346,17 +345,6 @@ class AnomalyDetection:
         cluster_rank = np.full(n_clusters, n_clusters - 1, dtype=np.int32) - np.argsort(np.argsort(cluster_counts))
         cluster_labels = [cluster_rank[cluster] for cluster in cluster_labels]
         cluster_counts = [cluster_counts[cluster] for cluster in np.argsort(cluster_counts)][::-1]
-
-        # def adjust_clusters(row):
-        #     bins = np.bincount(row)
-        #     offset = [0 for _ in range(len(bins))]
-        #     preceeding_zeros = 0
-        #     for i, bin in enumerate(bins):
-        #         if bin == 0:
-        #             preceeding_zeros += 1
-        #         offset[i] = preceeding_zeros
-        #     return row.apply(lambda val: val - offset[val])
-        # self.quantized_data = self.quantized_data.apply(adjust_clusters, axis=1)
 
         self.n_clusters = n_clusters
         self.cluster_counts = cluster_counts
