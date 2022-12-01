@@ -19,25 +19,7 @@ A satellite data set containing particle counts in 19 energy bands (in keV):
 For analysis the data stream in each band is
 partitioned into sequences of uniform window length.
 
-+ ```Satellite_manually_assign_clusters```: The number of clusters expected to
-  be present are assigned a priori. We then generate a PFSA for each cluster
-  and assign each window sequence to one of the clusters. If a sequence is
-  found that does not map back to one of the established PFSAs, it is labelled
-  as anamolous.
-
-+ ```Satellite_continuous_streaming```: No set amount of clusters is
-  predefined. Instead, ```patternly``` analyzes the continuous streams and
-  contstructs a new PFSA to add to the library when it comes across an sequence
-  that does not map back to any of the already established PFSAs.
-
-+ ```Satellite_half_assign_half_stream```: This approach is similar to both
-  ```Satellite_manually_assign_clusters``` and
-  ```Satellite_continuous_streaming```. We first establish a set number of
-  PFSAs to construct for the first half of the data. Then, upon streaming the
-  second half of the data, when we come across sequences that do not map back to any of the
-  PFSAs in the library, we construct a new PFSA and add it to the established library
-  rather than marking these unknown sequences as anamolous.
-
+See `Satellite Analysis.ipynb` for more details.
 
 ## Agitation Data
 
@@ -54,7 +36,7 @@ from [physionet](https://physionet.org/content/sleep-edf/1.0.0/)._
 
 ## Dealing with .edf files
 
-Many of the EEG datasets from [physionet](https://physionet.org/content/) come in the
+Many of the EEG datasets from [physionet](https://physionet.org/about/database/) come in the
 European Data Format (EDF). ```Reading_european_data_format_(edf).ipynb``` demonstrates
 basic manipulation of .edf files to quickly obtain a pandas ```DataFrame```.
 
