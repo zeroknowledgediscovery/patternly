@@ -1,0 +1,55 @@
+name: NASA channel concatenation with explicit seam and shifted anomaly marks
+
+on:
+  push:
+    branches: [data/nasa-smap-msl-telemetry]
+    paths: [".github/workflows/nasa-concatenated-channels.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  concat-channel-streams:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: data/nasa-smap-msl-telemetry
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install plotting and data parsing dependencies
+        run: |
+          python -m pip install "numpy==1.26.4" "pandas==2.2.3" "matplotlib==3.9.2" "scipy==1.11.4" "scikit-learn==1.5.2"
+      - name: Concatenate selected seven channel recordings without inventing continuity
+        env:
+          MPLBACKEND: Agg
+          OPENBLAS_NUM_THREADS: "1"
+        run: |
+          python experiments/nasa_smap_msl/concatenate_channels.py \
+            --channels P-1,E-13,E-1,E-10,G-7,F-7,T-1 \
+            --window 212 --stride 5 \
+            --out results/nasa_concatenated_research_view
+          python - <<'PY'
+          from pathlib import Path
+          import json,numpy as np
+          base=Path('results/nasa_concatenated_research_view')
+          for f in sorted(base.glob('*.npz')):
+              with np.load(f) as z:
+                  b=int(z['segment_boundary'][0])
+                  n=len(z['value'])
+                  assert 0<b<n
+                  m=json.loads((base/(f.stem+'_metadata.json')).read_text())
+                  assert n==m['concatenated_length'] and b==m['boundary_index']
+                  assert not m['physical_contiguity_confirmed']
+                  print('VERIFIED_JOIN',f.stem,n,b,'labels',m['anomaly_intervals_concatenated'])
+          PY
+      - name: Upload concatenated arrays, boundary-guarded windows, and full-series charts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nasa-seven-channels-concatenated-with-boundary-metadata
+          path: results/nasa_concatenated_research_view/
+          retention-days: 30
+          if-no-files-found: error
