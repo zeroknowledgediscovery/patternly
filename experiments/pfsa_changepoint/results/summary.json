@@ -1,0 +1,110 @@
+[
+  {
+    "N": 60000,
+    "method": "MLE_depth10",
+    "median_abs_error": 210.0,
+    "n": 5
+  },
+  {
+    "N": 60000,
+    "method": "adaptive_BIC",
+    "median_abs_error": 13084.0,
+    "n": 5
+  },
+  {
+    "N": 60000,
+    "method": "adaptive_depth10",
+    "median_abs_error": 4672.0,
+    "n": 5
+  },
+  {
+    "N": 60000,
+    "method": "adaptive_depth10_window1000",
+    "median_abs_error": 4790.0,
+    "n": 5
+  },
+  {
+    "N": 60000,
+    "method": "adaptive_depth10_window2000",
+    "median_abs_error": 3790.0,
+    "n": 5
+  },
+  {
+    "N": 60000,
+    "method": "adaptive_depth10_window250",
+    "median_abs_error": 4540.0,
+    "n": 5
+  },
+  {
+    "N": 60000,
+    "method": "adaptive_depth10_window4000",
+    "median_abs_error": 3790.0,
+    "n": 5
+  },
+  {
+    "N": 60000,
+    "method": "adaptive_depth10_window500",
+    "median_abs_error": 4790.0,
+    "n": 5
+  },
+  {
+    "N": 60000,
+    "method": "adaptive_depth10_window8000",
+    "median_abs_error": 210.0,
+    "n": 5
+  },
+  {
+    "N": 180000,
+    "method": "MLE_depth10",
+    "median_abs_error": 310.0,
+    "n": 5
+  },
+  {
+    "N": 180000,
+    "method": "adaptive_BIC",
+    "median_abs_error": 420.0,
+    "n": 5
+  },
+  {
+    "N": 180000,
+    "method": "adaptive_depth10",
+    "median_abs_error": 420.0,
+    "n": 5
+  },
+  {
+    "N": 180000,
+    "method": "adaptive_depth10_window1000",
+    "median_abs_error": 610.0,
+    "n": 5
+  },
+  {
+    "N": 180000,
+    "method": "adaptive_depth10_window2000",
+    "median_abs_error": 610.0,
+    "n": 5
+  },
+  {
+    "N": 180000,
+    "method": "adaptive_depth10_window250",
+    "median_abs_error": 360.0,
+    "n": 5
+  },
+  {
+    "N": 180000,
+    "method": "adaptive_depth10_window4000",
+    "median_abs_error": 610.0,
+    "n": 5
+  },
+  {
+    "N": 180000,
+    "method": "adaptive_depth10_window500",
+    "median_abs_error": 610.0,
+    "n": 5
+  },
+  {
+    "N": 180000,
+    "method": "adaptive_depth10_window8000",
+    "median_abs_error": 610.0,
+    "n": 5
+  }
+]
