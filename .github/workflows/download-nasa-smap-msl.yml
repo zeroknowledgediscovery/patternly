@@ -57,3 +57,5 @@ jobs:
             git rebase origin/data/nasa-smap-msl-telemetry
             git push origin HEAD:data/nasa-smap-msl-telemetry
           fi
+
+# Rerun following correction for the unlabeled T-10 channel.
