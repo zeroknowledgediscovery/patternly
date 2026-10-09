@@ -1,0 +1,85 @@
+name: NASA seven-channel concatenated causal anomaly preemption suite
+
+on:
+  push:
+    branches: [data/nasa-smap-msl-telemetry]
+    paths:
+      - ".github/workflows/nasa-concat-preemption-suite.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seven-channel-causal-suite:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: data/nasa-smap-msl-telemetry
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Install genuine native LSmash and GenESeSS, plus explicitly labeled JS baselines
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++ libgsl-dev libboost-all-dev
+          python -m pip install "pip==24.0"
+          python -m pip install "numpy==1.23.5" "scipy==1.10.1" "pandas==1.5.3" "scikit-learn==1.2.2" "matplotlib==3.7.5" dill
+          python -m pip install --only-binary=:all: "zedsuite==0.0.7"
+          python -m pip install "lsmash @ git+https://github.com/zeroknowledgediscovery/lsmash.git@66960a98a012f63face06ce70145b7ba3a386f7c"
+          python -c "import lsmash; from zedsuite.genesess import GenESeSS; assert hasattr(lsmash,'from_sequences_with_pfsas'); print('NATIVE_BOTH_ENGINES_VERIFIED')"
+          python -m py_compile experiments/nasa_smap_msl/concatenated_preemption_suite.py experiments/nasa_smap_msl/aggregate_concat_preemption.py
+      - name: Prepare seven actual NASA concatenated arrays with explicit segment joins
+        env:
+          MPLBACKEND: Agg
+          OPENBLAS_NUM_THREADS: "1"
+        run: |
+          python experiments/nasa_smap_msl/concatenate_channels.py \
+            --channels P-1,E-13,E-1,E-10,G-7,F-7,T-1 \
+            --window 212 --stride 5 \
+            --out results/nasa_concatenated_research_view
+      - name: Run original full native + statistical preemption suite on every channel
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "2"
+          MPLBACKEND: Agg
+          PYTHONUNBUFFERED: "1"
+        run: |
+          mkdir -p results/nasa_concat_preemption
+          for ch in P-1 E-13 E-1 E-10 G-7 F-7 T-1; do
+            echo "::group::CAUSAL CHANNEL $ch"
+            mkdir -p "results/nasa_concat_preemption/$ch"
+            if python experiments/nasa_smap_msl/concatenated_preemption_suite.py \
+                --channel "$ch" \
+                --concat-root results/nasa_concatenated_research_view \
+                --reference-length 1500 \
+                --calibration-length 750 \
+                --initial-train-length 1024 \
+                --window 212 --stride 5 \
+                --epsilons 0.01,0.05,0.1,0.2 \
+                --out "results/nasa_concat_preemption/$ch" \
+                > "results/nasa_concat_preemption/$ch/stdout.log" 2>&1; then
+              echo "CHANNEL COMPLETED: $ch"
+              grep -E "^PRIMARY_PREEMPTION|^CHANNEL_STATUS" "results/nasa_concat_preemption/$ch/stdout.log" || true
+            else
+              rc=$?
+              echo "CHANNEL FAILED: $ch exit=$rc"
+              printf 'Channel %s failed, exit %s\n' "$ch" "$rc" > "results/nasa_concat_preemption/$ch/ERROR.txt"
+              tail -45 "results/nasa_concat_preemption/$ch/stdout.log"
+            fi
+            echo "::endgroup::"
+          done
+          python experiments/nasa_smap_msl/aggregate_concat_preemption.py \
+            --root results/nasa_concat_preemption
+          test -s results/nasa_concat_preemption/method_status.csv
+          test -s results/nasa_concat_preemption/primary_q99_h212.csv
+      - name: Upload every channel and aggregate outputs, even on method failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nasa-seven-channel-concat-causal-preemption-native-and-JS
+          path: results/nasa_concat_preemption/
+          retention-days: 30
+          if-no-files-found: warn
