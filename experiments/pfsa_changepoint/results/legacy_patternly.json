@@ -1,1 +1,31 @@
-{"status":"dependency_failure","reason":"Historical zedsuite/patternly installation unsuccessful; see Actions logs"}
+{
+  "method": "original_patternly_StreamingDetection",
+  "implementation": "patternly.detection.StreamingDetection",
+  "N": 60000,
+  "seed": 12554,
+  "window": 4000,
+  "n_clusters": 2,
+  "status": "success",
+  "estimated_cp": 16000,
+  "true_cp": 31800,
+  "abs_error": 15800,
+  "n_windows": 15,
+  "cluster_labels": [
+    1,
+    1,
+    1,
+    1,
+    0,
+    1,
+    0,
+    0,
+    1,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+  ],
+  "elapsed_seconds": 0.48
+}
