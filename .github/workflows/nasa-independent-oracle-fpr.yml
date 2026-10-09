@@ -3,7 +3,7 @@ name: NASA matched-realized-FPR diagnostic (test oracle only)
 on:
   push:
     branches: [data/nasa-smap-msl-telemetry]
-    paths: [".github/workflows/nasa-independent-oracle-fpr.yml"]
+    paths: [".github/workflows/nasa-independent-oracle-fpr.yml", "experiments/nasa_smap_msl/exploratory_matched_fpr.py"]
   workflow_dispatch:
 
 permissions:
