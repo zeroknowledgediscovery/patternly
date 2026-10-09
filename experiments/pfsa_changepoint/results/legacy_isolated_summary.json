@@ -1,0 +1,122 @@
+[
+  {
+    "N": 60000,
+    "window": 500,
+    "n_success": 5,
+    "n_total": 5,
+    "n_crashed": 0,
+    "n_failed": 0,
+    "n_timeouts": 0,
+    "err_likelihood_median": 15200.0,
+    "err_labels_median": 9200.0,
+    "err_layer2_median": 15700.0
+  },
+  {
+    "N": 60000,
+    "window": 1000,
+    "n_success": 4,
+    "n_total": 5,
+    "n_crashed": 1,
+    "n_failed": 0,
+    "n_timeouts": 0,
+    "err_likelihood_median": 14300.0,
+    "err_labels_median": 14200.0,
+    "err_layer2_median": 16800.0
+  },
+  {
+    "N": 60000,
+    "window": 2000,
+    "n_success": 4,
+    "n_total": 5,
+    "n_crashed": 1,
+    "n_failed": 0,
+    "n_timeouts": 0,
+    "err_likelihood_median": 15200.0,
+    "err_labels_median": 17000.0,
+    "err_layer2_median": 8200.0
+  },
+  {
+    "N": 60000,
+    "window": 4000,
+    "n_success": 5,
+    "n_total": 5,
+    "n_crashed": 0,
+    "n_failed": 0,
+    "n_timeouts": 0,
+    "err_likelihood_median": 16200.0,
+    "err_labels_median": 15800.0,
+    "err_layer2_median": null
+  },
+  {
+    "N": 60000,
+    "window": 8000,
+    "n_success": 0,
+    "n_total": 5,
+    "n_crashed": 0,
+    "n_failed": 5,
+    "n_timeouts": 0,
+    "err_likelihood_median": null,
+    "err_labels_median": null,
+    "err_layer2_median": null
+  },
+  {
+    "N": 180000,
+    "window": 500,
+    "n_success": 5,
+    "n_total": 5,
+    "n_crashed": 0,
+    "n_failed": 0,
+    "n_timeouts": 0,
+    "err_likelihood_median": 24100.0,
+    "err_labels_median": 42600.0,
+    "err_layer2_median": 51250.0
+  },
+  {
+    "N": 180000,
+    "window": 1000,
+    "n_success": 5,
+    "n_total": 5,
+    "n_crashed": 0,
+    "n_failed": 0,
+    "n_timeouts": 0,
+    "err_likelihood_median": 37400.0,
+    "err_labels_median": 46600.0,
+    "err_layer2_median": 34600.0
+  },
+  {
+    "N": 180000,
+    "window": 2000,
+    "n_success": 4,
+    "n_total": 5,
+    "n_crashed": 1,
+    "n_failed": 0,
+    "n_timeouts": 0,
+    "err_likelihood_median": 33600.0,
+    "err_labels_median": 47600.0,
+    "err_layer2_median": 50400.0
+  },
+  {
+    "N": 180000,
+    "window": 4000,
+    "n_success": 5,
+    "n_total": 5,
+    "n_crashed": 0,
+    "n_failed": 0,
+    "n_timeouts": 0,
+    "err_likelihood_median": 47400.0,
+    "err_labels_median": 59400.0,
+    "err_layer2_median": null
+  },
+  {
+    "N": 180000,
+    "window": 8000,
+    "n_success": 5,
+    "n_total": 5,
+    "n_crashed": 0,
+    "n_failed": 0,
+    "n_timeouts": 0,
+    "err_likelihood_median": 32600.0,
+    "err_labels_median": 48600.0,
+    "err_layer2_median": null
+  }
+]

@@ -1,0 +1,77 @@
+A_index,B_index,N,cp_labels,cp_layer2,cp_likelihood,elapsed_seconds,err_labels,err_layer2,err_likelihood,error,layer2_error,layer2_status,n_clusters,n_windows,returncode,same_tail_model,seed,status,stderr_tail,stdout_tail,true_cp,wall_seconds,window
+0,1,60000,16000,47500,13000,0.26,15800,15700,18800,,,success,2,120,,False,12554,success,,,31800,1.88,500
+1,0,60000,16000,15000,13000,0.24,15800,16800,18800,,,success,2,60,,False,12554,success,,,31800,1.77,1000
+1,0,60000,22000,20000,12000,0.23,9800,11800,19800,,,success,2,30,,False,12554,success,,,31800,1.75,2000
+1,0,60000,16000,,16000,0.16,15800,,15800,,,,2,15,,True,12554,success,,,31800,1.67,4000
+,,60000,,,,0.15,,,,"ValueError('invalid windows/scoring 7 (2, 7)')",,,2,,,,12554,failed,,,31800,1.67,8000
+1,0,60000,45000,12500,12000,0.33,13200,19300,19800,,,success,2,120,,False,12557,success,,,31800,1.86,500
+1,0,60000,45000,15000,12000,0.24,13200,16800,19800,,,success,2,60,,False,12557,success,,,31800,1.75,1000
+0,1,60000,12000,40000,46000,0.25,19800,8200,14200,,,success,2,30,,False,12557,success,,,31800,1.79,2000
+1,0,60000,12000,,12000,0.16,19800,,19800,,,,2,15,,False,12557,success,,,31800,1.71,4000
+,,60000,,,,0.15,,,,"ValueError('invalid windows/scoring 7 (2, 7)')",,,2,,,,12557,failed,,,31800,1.65,8000
+0,1,60000,25000,37500,47000,0.28,6800,5700,15200,,,success,2,120,,False,12560,success,,,31800,1.8,500
+0,1,60000,47000,35000,36000,0.26,15200,3200,4200,,,success,2,60,,True,12560,success,,,31800,1.77,1000
+0,1,60000,48000,40000,48000,0.23,16200,8200,16200,,,success,2,30,,True,12560,success,,,31800,1.75,2000
+1,0,60000,48000,,24000,0.15,16200,,7800,,,,2,15,,False,12560,success,,,31800,1.7,4000
+,,60000,,,,0.16,,,,"ValueError('invalid windows/scoring 7 (2, 7)')",,,2,,,,12560,failed,,,31800,1.68,8000
+1,0,60000,39000,12500,36500,0.26,7200,19300,4700,,,success,2,120,,False,12563,success,,,31800,1.77,500
+,,60000,,,,,,,,,,,,,-11,,12563,native_failure,"arning
+  warnings.warn(
+sh: 1: dot: not found
+sh: 1: dot: not found
+/opt/hostedtoolcache/Python/3.9.25/x64/lib/python3.9/site-packages/sklearn/cluster/_kmeans.py:870: FutureWarning: The default value of `n_init` will change from 10 to 'auto' in 1.4. Set the value of `n_init` explicitly to suppress the warning
+  warnings.warn(
+sh: 1: dot: not found
+","EXCEPTION: aut and pit size mismatch # aut size = 1 Tcount size 0 sync 1  -1 -1 
+
+",31800,2.68,1000
+1,0,60000,14000,,36000,0.21,17800,,4200,,ValueError('Unable to find PFSA for cluster 2/2. Try quantizing the data manually.'),failure,2,30,,False,12563,success,,,31800,1.78,2000
+1,0,60000,36000,,48000,0.16,4200,,16200,,,,2,15,,True,12563,success,,,31800,1.7,4000
+,,60000,,,,0.15,,,,"ValueError('invalid windows/scoring 7 (2, 7)')",,,2,,,,12563,failed,,,31800,1.68,8000
+0,1,60000,41000,35000,38000,0.3,9200,3200,6200,,,success,2,120,,False,12566,success,,,31800,1.78,500
+1,0,60000,22000,15000,22000,0.26,9800,16800,9800,,,success,2,60,,False,12566,success,,,31800,1.74,1000
+,,60000,,,,,,,,,,,,,-11,,12566,native_failure,"itly to suppress the warning
+  warnings.warn(
+sh: 1: dot: not found
+sh: 1: dot: not found
+/opt/hostedtoolcache/Python/3.9.25/x64/lib/python3.9/site-packages/sklearn/cluster/_kmeans.py:870: FutureWarning: The default value of `n_init` will change from 10 to 'auto' in 1.4. Set the value of `n_init` explicitly to suppress the warning
+  warnings.warn(
+","EXCEPTION: aut and pit size mismatch # aut size = 1 Tcount size 0 sync 0 1  -1 -1 
+
+",31800,2.35,2000
+0,1,60000,40000,,48000,0.15,8200,,16200,,,,2,15,,False,12566,success,,,31800,1.59,4000
+,,60000,,,,0.15,,,,"ValueError('invalid windows/scoring 7 (2, 7)')",,,2,,,,12566,failed,,,31800,1.49,8000
+0,1,180000,77500,140000,77500,0.51,17900,44600,17900,,,success,2,360,,True,12554,success,,,95400,1.85,500
+0,1,180000,38000,140000,77000,0.42,57400,44600,18400,,,success,2,180,,True,12554,success,,,95400,1.84,1000
+1,0,180000,144000,50000,78000,0.35,48600,45400,17400,,,success,2,90,,True,12554,success,,,95400,1.74,2000
+0,1,180000,144000,,72000,0.26,48600,,23400,,,,2,45,,True,12554,success,,,95400,1.66,4000
+1,0,180000,144000,,128000,0.25,48600,,32600,,,,2,22,,True,12554,success,,,95400,1.67,8000
+0,1,180000,45500,37500,94500,0.48,49900,57900,900,,,success,2,360,,False,12557,success,,,95400,1.87,500
+1,0,180000,142000,,39000,0.36,46600,,56400,,ValueError('Unable to find PFSA for cluster 2/2. Try quantizing the data manually.'),failure,2,180,,True,12557,success,,,95400,1.8,1000
+0,1,180000,142000,40000,40000,0.36,46600,55400,55400,,,success,2,90,,True,12557,success,,,95400,1.75,2000
+0,1,180000,36000,,144000,0.26,59400,,48600,,,,2,45,,True,12557,success,,,95400,1.7,4000
+0,1,180000,144000,,96000,0.25,48600,,600,,,,2,22,,False,12557,success,,,95400,1.66,8000
+0,1,180000,138000,92500,46500,0.52,42600,2900,48900,,,success,2,360,,True,12560,success,,,95400,1.89,500
+0,1,180000,40000,45000,45000,0.45,55400,50400,50400,,,success,2,180,,True,12560,success,,,95400,1.88,1000
+0,1,180000,36000,40000,138000,0.34,59400,55400,42600,,,success,2,90,,True,12560,success,,,95400,1.71,2000
+1,0,180000,36000,,48000,0.26,59400,,47400,,,,2,45,,True,12560,success,,,95400,1.63,4000
+0,1,180000,40000,,48000,0.26,55400,,47400,,,,2,22,,True,12560,success,,,95400,1.71,8000
+0,1,180000,113000,37500,119500,0.5,17600,57900,24100,,,success,2,360,,False,12563,success,,,95400,1.95,500
+0,1,180000,118000,120000,120000,0.4,22600,24600,24600,,,success,2,180,,False,12563,success,,,95400,1.83,1000
+0,1,180000,120000,70000,120000,0.38,24600,25400,24600,,,success,2,90,,False,12563,success,,,95400,1.84,2000
+0,1,180000,120000,,40000,0.26,24600,,55400,,,,2,45,,False,12563,success,,,95400,1.73,4000
+0,1,180000,120000,,120000,0.25,24600,,24600,,,,2,22,,False,12563,success,,,95400,1.66,8000
+1,0,180000,37500,,57500,0.45,57900,,37900,,ValueError('Unable to find PFSA for cluster 2/2. Try quantizing the data manually.'),failure,2,360,,False,12566,success,,,95400,1.86,500
+1,0,180000,58000,115000,58000,0.4,37400,19600,37400,,,success,2,180,,False,12566,success,,,95400,1.77,1000
+,,180000,,,,,,,,,,,,,-11,,12566,native_failure,"arning
+  warnings.warn(
+sh: 1: dot: not found
+sh: 1: dot: not found
+/opt/hostedtoolcache/Python/3.9.25/x64/lib/python3.9/site-packages/sklearn/cluster/_kmeans.py:870: FutureWarning: The default value of `n_init` will change from 10 to 'auto' in 1.4. Set the value of `n_init` explicitly to suppress the warning
+  warnings.warn(
+sh: 1: dot: not found
+","EXCEPTION: aut and pit size mismatch # aut size = 1 Tcount size 0 sync 0 0  -1 -1 
+
+",95400,2.5,2000
+1,0,180000,36000,,116000,0.26,59400,,20600,,,,2,45,,True,12566,success,,,95400,1.7,4000
+0,1,180000,40000,,144000,0.25,55400,,48600,,,,2,22,,True,12566,success,,,95400,1.65,8000
