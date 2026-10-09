@@ -66,3 +66,36 @@ calibration between methods.
 
 GitHub Actions workflow: .github/workflows/nasa-genesess-epsilon.yml
 runs both pilot configurations and uploads result artifacts.
+
+
+## Reproduced results, October 2026
+
+Executed with actual zedsuite 0.0.7 GenESeSS + Llk on 12 NASA
+channels in GitHub Actions. Native run:
+https://github.com/zeroknowledgediscovery/patternly/actions/runs/37880202728
+
+Both eps=0.05 and eps=0.10 yielded **identical aggregate metrics**
+at the selected thresholds, but did not always produce identical
+automata.
+
+Quantization | Valid channels | Annotated events in valid channels | Event hits | New-alarm events
+:--|--:|--:|--:|--:
+Four-level quartiles | 11/12 | 23 | 6 (26.1%) | 5 (21.7%)
+Binary median | 11/12 | 23 | 4 (17.4%) | 3 (13.0%)
+
+The one invalid channel in each variant is G-7: native Llk
+returned nonfinite scores on normal calibration windows. The code reports
+this error explicitly and does not silently substitute another algorithm.
+This reduces the event denominator from 26 to 23. Do not compare pooled
+recall to the 26-event baseline without accounting for exclusion.
+
+Median inferred state count was **1 state**, for both eps values and
+both quantization schemes, among the successful channels. Some channels
+produce genuinely nontrivial models: under binary quantization, P-1 has
+6 states at 0.05 vs 5 at 0.10, and F-7 has 11 vs 4. However neither
+detected annotated events at the current calibration operating point.
+
+These are fixed-threshold pilot outcomes, not a final model comparison
+at matched false-alarm rates. In particular, one-state automata on
+near-constant channels indicate that quantization and data richness,
+not just epsilon, constrain the experiment.
