@@ -1,0 +1,70 @@
+name: NASA GenESeSS minimum two-state epsilon sweep
+
+on:
+  push:
+    branches: [data/nasa-smap-msl-telemetry]
+    paths: [".github/workflows/nasa-genesess-two-state-sweep.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  two-state-sweep:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: data/nasa-smap-msl-telemetry
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Install verified GenESeSS binary environment
+        run: |
+          python -m pip install "pip==24.0"
+          python -m pip install "numpy==1.23.5" "scipy==1.10.1" "pandas==1.5.3" "scikit-learn==1.2.2" "matplotlib==3.7.5" dill
+          python -m pip install --only-binary=:all: "zedsuite==0.0.7"
+          python -c "from zedsuite.genesess import GenESeSS;from zedsuite.zutil import Llk;print('NATIVE_GENESESS_OK')"
+      - name: Sweep 14 epsilon values on 12 NASA channels, binary and 4-symbol
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+          MPLBACKEND: "Agg"
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python experiments/nasa_smap_msl/genesess_epsilon_sweep.py \
+            --alphabets 2,4 \
+            --min-states 2 \
+            --max-states 500 \
+            --timeout 20 \
+            --out results/nasa_genesess_epsilon_sweep
+      - name: Validate sweep metadata and selected models
+        run: |
+          test -s results/nasa_genesess_epsilon_sweep/epsilon_grid.csv
+          test -s results/nasa_genesess_epsilon_sweep/selection_summary.csv
+          test -s results/nasa_genesess_epsilon_sweep/run.json
+          python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+          out=Path("results/nasa_genesess_epsilon_sweep")
+          grid=pd.read_csv(out/"epsilon_grid.csv")
+          summary=pd.read_csv(out/"selection_summary.csv")
+          manifest=json.loads((out/"run.json").read_text())
+          assert len(grid)==12*2*14,len(grid)
+          assert len(summary)==24,len(summary)
+          assert len(manifest["epsilons"])==14,manifest["epsilons"]
+          if (out/"selected.csv").exists():
+            selected=pd.read_csv(out/"selected.csv")
+            assert all(selected.n_states>=2)
+          print("SWEEP_VALIDATED",json.dumps(manifest))
+          print("SELECTION_SUMMARY\n",summary.to_string(index=False))
+          PY
+      - name: Upload inferred models, grid and selected scores
+        uses: actions/upload-artifact@v4
+        with:
+          name: nasa-genesess-minimum-two-states-epsilon-sweep
+          path: results/nasa_genesess_epsilon_sweep/
+          retention-days: 30
+          if-no-files-found: error
