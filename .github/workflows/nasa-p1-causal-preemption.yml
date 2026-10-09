@@ -1,0 +1,62 @@
+name: NASA P-1 causal early-warning audit, native LSmash and explicit simple baselines
+
+on:
+  push:
+    branches: [data/nasa-smap-msl-telemetry]
+    paths: [".github/workflows/nasa-p1-causal-preemption.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  causal-preemption:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: data/nasa-smap-msl-telemetry
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Build both genuine native engines
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++ libgsl-dev libboost-all-dev
+          python -m pip install "pip==24.0"
+          python -m pip install "numpy==1.23.5" "scipy==1.10.1" "pandas==1.5.3" "scikit-learn==1.2.2" "matplotlib==3.7.5" dill
+          python -m pip install --only-binary=:all: "zedsuite==0.0.7"
+          python -m pip install "lsmash @ git+https://github.com/zeroknowledgediscovery/lsmash.git@66960a98a012f63face06ce70145b7ba3a386f7c"
+          python -c "import lsmash; from zedsuite.genesess import GenESeSS; assert hasattr(lsmash,'from_sequences_with_pfsas'); print('ACTUAL_NATIVE_LSMASH_GENESESS_PRESENT')"
+          python -m py_compile experiments/nasa_smap_msl/p1_causal_preemption.py
+      - name: Evaluate genuinely causal time-of-alarm versus anomaly onset
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "2"
+          MPLBACKEND: "Agg"
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python experiments/nasa_smap_msl/p1_causal_preemption.py \
+            --fit-length 1500 --initial-train-length 1024 \
+            --window 212 --stride 5 \
+            --out results/nasa_p1_causal_preemption
+          test -s results/nasa_p1_causal_preemption/preemptive_summary.csv
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+          d=pd.read_csv('results/nasa_p1_causal_preemption/preemptive_summary.csv')
+          assert len(d)==4*4*4, f'Expected 64 method/threshold/horizon rows, found {len(d)}'
+          assert d.clean_alarm_occupancy.between(0,1).all()
+          assert d.advance_hits.between(0,3).all()
+          print('PRIMARY_Q99_H212')
+          print(d[(d.calibration_quantile==.99)&(d.preemption_horizon==212)].to_string(index=False))
+          PY
+      - name: Preserve both native model files, scores, early alarms and plots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nasa-P1-causal-native-LSmash-GenESeSS-vs-JS-preemption
+          path: results/nasa_p1_causal_preemption/
+          retention-days: 30
+          if-no-files-found: warn
