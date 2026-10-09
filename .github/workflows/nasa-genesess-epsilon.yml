@@ -1,0 +1,48 @@
+name: NASA real GenESeSS eps 0.05 0.10 pilot
+
+on:
+  push:
+    branches: [data/nasa-smap-msl-telemetry]
+    paths: [".github/workflows/nasa-genesess-epsilon.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  genesess:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: data/nasa-smap-msl-telemetry
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Install historical GenESeSS binary and analysis tools
+        run: |
+          python -m pip install "pip==24.0"
+          python -m pip install "numpy==1.23.5" "scipy==1.10.1" "pandas==1.5.3" "scikit-learn==1.2.2" "matplotlib==3.7.5" dill
+          python -m pip install --only-binary=:all: "zedsuite==0.0.7"
+          python -c "from zedsuite.genesess import GenESeSS; from zedsuite.zutil import Llk; print('GENESESS_NATIVE_IMPORT_OK')"
+      - name: Test both epsilon values with real NASA spacecraft channels
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+          MPLBACKEND: "Agg"
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python experiments/nasa_smap_msl/genesess_pilot.py \
+            --channels P-1,E-1,F-7 \
+            --eps-values 0.05,0.1 \
+            --timeout 90 \
+            --out results/nasa_genesess_smoke
+          cat results/nasa_genesess_smoke/summary.csv
+      - name: Upload GenESeSS generated PFSAs, scores, figures, failures
+        uses: actions/upload-artifact@v4
+        with:
+          name: nasa-genesess-eps-005-010-3channels
+          path: results/nasa_genesess_smoke/
+          retention-days: 30
+          if-no-files-found: error
