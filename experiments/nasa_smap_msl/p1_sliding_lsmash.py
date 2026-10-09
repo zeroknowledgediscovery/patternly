@@ -175,8 +175,8 @@ def annotated_plots(D,starts,win,marked,means,meta,out):
     from matplotlib.gridspec import GridSpec
     n=len(starts)
     fig=plt.figure(figsize=(11.5,10.5))
-    gs=GridSpec(2,2,figure=fig,width_ratios=[0.24,9.5],
-        height_ratios=[0.24,9.5],wspace=.04,hspace=.04)
+    gs=GridSpec(2,2,figure=fig,width_ratios=[0.65,9.5],
+        height_ratios=[0.24,9.5],wspace=.20,hspace=.04)
     ax=fig.add_subplot(gs[1,1])
     upper=fig.add_subplot(gs[0,1],sharex=ax)
     left=fig.add_subplot(gs[1,0],sharey=ax)
@@ -187,12 +187,18 @@ def annotated_plots(D,starts,win,marked,means,meta,out):
                  origin="upper",interpolation="nearest",aspect="auto")
     left.imshow(marked.astype(float)[:,None],cmap="Reds",vmin=0,vmax=1,
                 origin="upper",interpolation="nearest",aspect="auto")
-    upper.axis("off");left.axis("off")
+    upper.axis("off")
+    left.set_xticks([])
     step=max(1,round(n/12/50)*50)
     ticks=np.arange(0,n,step,dtype=int)
-    ax.set_xticks(ticks);ax.set_yticks(ticks)
+    ax.set_xticks(ticks)
+    ax.set_yticks(ticks)
+    ax.tick_params(axis="y",left=False,labelleft=False)
+    left.set_yticks(ticks)
+    left.set_yticklabels([str(t) for t in ticks])
+    left.tick_params(axis="y",length=3,labelsize=9,pad=4)
     ax.set_xlabel("Sliding window index j (chronological, step 5)")
-    ax.set_ylabel("Sliding window index i")
+    left.set_ylabel("Sliding window index i")
     ax.set_title(f"P-1 {meta['mode']}: native LSmash distances\n"
          f"{n} overlapping windows × {win} observations; "
          "red strips = NASA anomaly overlap",fontsize=12,pad=14)
