@@ -119,3 +119,48 @@ Results:
 If a training channel has only one distinct symbol after quantization, the experiment declares it degenerate rather than manufacturing two PFSA states. If every epsilon fails to yield 2+ states, it reports no eligible model. The selection criterion targets a minimum nontrivial state count, not best anomaly-detection performance.
 
 GitHub Actions: https://github.com/zeroknowledgediscovery/patternly/actions/workflows/nasa-genesess-two-state-sweep.yml
+
+
+## At-least-two-state inference results (October 2026)
+
+Reproduced successful GitHub runs:
+- Grid: https://github.com/zeroknowledgediscovery/patternly/actions/runs/37880764127
+- Boundary refinement: https://github.com/zeroknowledgediscovery/patternly/actions/runs/37881153073
+
+The 14-epsilon training-only grid (0.001 to 0.7) produced 9 scored
+models with >=2 states out of 24 (12 channels times 2 quantizers).
+For most eligible channels a *high* epsilon was selected because the
+criterion explicitly minimizes state count and breaks ties toward
+larger epsilon. This is not evidence that high epsilon is scientifically
+optimal for anomaly detection.
+
+Channel | Binary eps / states | 4-symbol eps / states
+:--|:--|:--
+P-1 | 0.7 / 2 | 0.7 / 2
+T-1 | 0.3 / 2 | 0.5 / 2
+F-7 | 0.7 / 2 | 0.7 / 2
+C-1 | 0.7 / 2 | 0.002 / 12
+M-1 | 0.7 / 2 | no eligible model
+G-7 | no eligible model | no eligible model
+T-13 | no eligible model | no eligible model
+
+The five remaining channels E-1, E-10, P-4, T-8 and S-2 had
+only one distinct symbol in the normal-fit data for either quantizer.
+No meaningful multi-state inference is possible with that representation.
+
+A follow-up sweep explored 17 more epsilons between 1e-5 and 0.99
+for C-1, G-7, T-13 and M-1. C-1 under four-symbol quantization
+yielded a **6-state model at eps=0.0035**, reducing the smallest
+nontrivial observed state count from 12. No 2+ state models emerged
+for G-7 or T-13 with either quantizer, or M-1 with four symbols.
+
+The native GenESeSS runs succeeded; every selected initial-grid
+model was also successfully scored with native Llk. These results
+are about state structure, not necessarily superior detection.
+Detailed model files, inference error, state counts, model-score
+outputs and test-onset metrics are retained in both workflow artifacts.
+
+Epsilon-to-state count is often **nonmonotonic**: e.g. P-1 binary
+at 0.001 has 82 states; at 0.002 it collapses to one state; at
+0.005 it yields 13. Do not infer epsilon directionality from a
+single pair of runs.
