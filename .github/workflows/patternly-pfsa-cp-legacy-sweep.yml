@@ -1,0 +1,43 @@
+name: Historical Patternly PFSA Change-Point Window Sweep
+
+on:
+  push:
+    branches: [experiment/pfsa-changepoint-2026]
+    paths: [".github/workflows/patternly-pfsa-cp-legacy-sweep.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sweep:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experiment/pfsa-changepoint-2026
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Install pinned legacy binary dependencies
+        run: |
+          python -m pip install "pip==24.0"
+          python -m pip install "numpy==1.23.5" "scipy==1.10.1" "pandas==1.5.3" "scikit-learn==1.2.2" "numba==0.57.1" dill
+          python -m pip install --only-binary=:all: "zedsuite==0.0.7" "patternly==0.0.33"
+      - name: Run original Patternly across 2 lengths 5 seeds 5 windows
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+        run: python experiments/pfsa_changepoint/legacy_sweep.py --seeds 5 --lengths 60000,180000 --windows 500,1000,2000,4000,8000
+      - name: Commit numerical results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add experiments/pfsa_changepoint/results/legacy_sweep.csv experiments/pfsa_changepoint/results/legacy_sweep_summary.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Record full original Patternly change-point sweep [skip ci]"
+            git fetch origin experiment/pfsa-changepoint-2026
+            git rebase origin/experiment/pfsa-changepoint-2026
+            git push origin HEAD:experiment/pfsa-changepoint-2026
+          fi
