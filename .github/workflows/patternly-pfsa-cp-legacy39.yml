@@ -22,7 +22,7 @@ jobs:
           python-version: "3.9"
       - name: Install supported 2022-era dependency wheels
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install "pip==24.0"
           python -m pip install "numpy==1.23.5" "scipy==1.10.1" "pandas==1.5.3" "scikit-learn==1.2.2" "numba==0.57.1" dill
           python -m pip install --only-binary=:all: "zedsuite==0.0.7"
           python -m pip install --only-binary=:all: "patternly==0.0.33"
