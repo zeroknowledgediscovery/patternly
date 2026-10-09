@@ -3,7 +3,7 @@ name: NASA GenESeSS minimum two-state epsilon sweep
 on:
   push:
     branches: [data/nasa-smap-msl-telemetry]
-    paths: [".github/workflows/nasa-genesess-two-state-sweep.yml"]
+    paths: [".github/workflows/nasa-genesess-two-state-sweep.yml", "experiments/nasa_smap_msl/genesess_epsilon_sweep.py"]
   workflow_dispatch:
 
 permissions:
@@ -26,6 +26,10 @@ jobs:
           python -m pip install "numpy==1.23.5" "scipy==1.10.1" "pandas==1.5.3" "scikit-learn==1.2.2" "matplotlib==3.7.5" dill
           python -m pip install --only-binary=:all: "zedsuite==0.0.7"
           python -c "from zedsuite.genesess import GenESeSS;from zedsuite.zutil import Llk;print('NATIVE_GENESESS_OK')"
+      - name: Verify sweep parser and GenESeSS runtime diagnostics
+        run: |
+          python -m py_compile experiments/nasa_smap_msl/genesess_epsilon_sweep.py
+          python -c "from zedsuite.genesess import GenESeSS; from zedsuite.zutil import Llk;print('PREFLIGHT_NATIVE_OK')"
       - name: Sweep 14 epsilon values on 12 NASA channels, binary and 4-symbol
         env:
           OPENBLAS_NUM_THREADS: "1"
