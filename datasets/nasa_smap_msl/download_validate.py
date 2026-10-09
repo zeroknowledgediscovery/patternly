@@ -65,8 +65,12 @@ def main():
     for split in ("train","test"):
         files={x.stem:x for x in sorted((src/"data"/split).glob("*.parquet"))}
         print("Downloaded",split,"parquets",len(files),flush=True)
-        assert set(files)==expected,dict(missing=sorted(expected-set(files)),
-                                      extra=sorted(set(files)-expected))
+        assert expected.issubset(set(files)),dict(missing=sorted(expected-set(files)))
+        if split=="train":
+            manifest["source_channels"]=len(files)
+            manifest["annotated_channels"]=len(expected)
+            manifest["unlabeled_channels"]=sorted(set(files)-expected)
+            print("Channels without published anomaly labels:",manifest["unlabeled_channels"],flush=True)
         for ch,path in files.items():
             df=pd.read_parquet(path)
             assert "value" in df.columns and "timestep" in df.columns,(ch,df.columns)
@@ -80,7 +84,7 @@ def main():
             np.savez_compressed(outfile,value=vals)
             with np.load(outfile) as out:
                 assert np.array_equal(vals,out["value"])
-            if split=="test":
+            if split=="test" and ch in expected:
                 desired=set(labels.loc[labels.chan_id==ch,"num_values"].astype(int))
                 assert desired=={len(vals)},(ch,"test count mismatch",desired,len(vals))
             manifest["channels"].append({
@@ -96,7 +100,7 @@ def main():
     manifest["n_channel_files"]=len(manifest["channels"])
     manifest["n_test_samples"]=sum(x["n_timesteps"] for x in manifest["channels"] if x["split"]=="test")
     manifest["n_train_samples"]=sum(x["n_timesteps"] for x in manifest["channels"] if x["split"]=="train")
-    assert manifest["n_channel_files"]==2*len(expected)
+    assert manifest["n_channel_files"]==2*manifest["source_channels"]
     (dst/"manifest.json").write_text(json.dumps(manifest,indent=2)+"\n")
     (dst/"SHA256SUMS.tsv").write_text("sha256\toriginal_path\n"+"\n".join(f"{s}\t{p}" for s,p in sha_rows)+"\n")
     print("DATASET_VALIDATION",json.dumps({
