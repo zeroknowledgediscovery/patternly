@@ -1,0 +1,60 @@
+name: Patternly PFSA change-point 2026 benchmark
+
+on:
+  push:
+    branches:
+      - experiment/pfsa-changepoint-2026
+    paths:
+      - ".github/workflows/patternly-pfsa-cp-2026.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experiment/pfsa-changepoint-2026
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install modern numerical dependencies
+        run: |
+          python -m pip install -U pip
+          python -m pip install "numpy==1.26.4" "scipy==1.11.4" "numba==0.59.1" "pandas==2.2.3" "scikit-learn==1.5.2"
+      - name: Run fixed-seed modern benchmark
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+        run: python experiments/pfsa_changepoint/benchmark.py --seeds 5
+      - name: Attempt historical Patternly installation
+        id: install
+        continue-on-error: true
+        run: |
+          python -m pip install "Cython<3" "setuptools<70" dill
+          timeout 180s python -m pip install --no-cache-dir "zedsuite==0.0.7" "patternly==0.0.33"
+      - name: Test original Patternly (or record missing dependencies)
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+        run: |
+          mkdir -p experiments/pfsa_changepoint/results
+          if [ "${{ steps.install.outcome }}" = "success" ]; then
+            timeout 180s python experiments/pfsa_changepoint/legacy_probe.py || echo '{"status":"failed","reason":"Original package runner did not complete (nonzero or timeout)"}' > experiments/pfsa_changepoint/results/legacy_patternly.json
+          else
+            echo '{"status":"dependency_failure","reason":"Historical zedsuite/patternly installation unsuccessful; see Actions logs"}' > experiments/pfsa_changepoint/results/legacy_patternly.json
+          fi
+      - name: Commit result files on experiment branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add experiments/pfsa_changepoint/results/
+          if ! git diff --cached --quiet; then
+            git commit -m "Record Patternly 2026 PFSA change-point benchmark [skip ci]"
+            git push origin HEAD:experiment/pfsa-changepoint-2026
+          fi
