@@ -170,8 +170,8 @@ def main():
         labels=pd.read_csv(DATA/"labeled_anomalies.csv")
         events=[(a+seam,b+seam) for a,b in
                 event_intervals(args.channel,len(test),labels)]
-    if cutoff+args.window>seam:
-        raise ValueError(f"Cannot fit/calibrate and score in initial normal segment of {seam} samples")
+    if cutoff>seam:
+        raise ValueError(f"Reference+calibration extends beyond historical normal prefix {seam}")
     if not np.isfinite(full).all():raise ValueError("Invalid raw telemetry")
     fit=full[:args.reference_length]
     # Bin boundaries determined only from initial 1500 historical samples,
@@ -218,35 +218,43 @@ def main():
         calibrations[name]=calibration;methods[name]=test_scores
         statuses[name]="ok"
 
-    import lsmash
-    native=lsmash.LsmashOptions()
-    native.data_type="symbolic";native.sae=False
-    if alphabet_full.issubset(ref_symbols):
+    # Each native C++ method runs in its own isolated subprocess.
+    # A native free()/malloc abort (seen in GenESeSS on some channels)
+    # cannot invalidate the other detectors or erase completed results.
+    import subprocess,sys
+    np.savez_compressed(out/"native_input.npz",
+        ref=np.asarray(ref,dtype=np.uint32),
+        cal=np.asarray(cal,dtype=np.uint32),
+        test=np.asarray(queries,dtype=np.uint32),
+        initial=np.asarray(symbols[:args.initial_train_length],dtype=np.uint32),
+        alphabet=np.asarray(k,dtype=int))
+    methods_info={}
+    worker=Path(__file__).with_name("native_causal_worker.py")
+    for mode,name in (("default","native_LSmash_default"),
+                      ("genesess","native_LSmash_GenESeSS")):
+        if mode=="default" and not alphabet_full.issubset(ref_symbols):
+            statuses[name]="SKIPPED: reference vocabulary missing symbols seen later; would leak into random-projector alphabet"
+            continue
+        output=out/("native_"+mode+"_scores.npz")
+        command=[sys.executable,str(worker),"--mode",mode,
+                 "--infile",str(out/"native_input.npz"),
+                 "--out",str(output),"--epsilons",args.epsilons]
+        cp=subprocess.run(command,capture_output=True,text=True)
+        (out/("native_"+mode+"_worker.log")).write_text(
+            "RETURN_CODE "+str(cp.returncode)+"\n"+cp.stdout+"\n"+cp.stderr)
+        if cp.returncode!=0:
+            statuses[name]=f"FAILED_NATIVE_WORKER: exit {cp.returncode}, "+(cp.stderr or cp.stdout).strip()[-280:]
+            print("NATIVE_METHOD_FAILURE",args.channel,name,statuses[name],flush=True)
+            continue
         try:
-            add("native_LSmash_default",
-                mean_native_to_references(lsmash,ref,cal,queries,native))
+            with np.load(output) as arrays:
+                add(name,(arrays["cal"],arrays["test"]))
+            info=json.loads(output.with_suffix(".json").read_text())
+            methods_info[name]=info
+            if mode=="genesess":model_info=info["models"]
         except Exception as ex:
-            statuses["native_LSmash_default"]="FAILED_NATIVE: "+repr(ex)
-    else:
-        statuses["native_LSmash_default"]=(
-            "SKIPPED_UNSEEN_TRAIN_ALPHABET: would infer default projector"
-            " alphabet using future data")
-    try:
-        if not hasattr(lsmash,"from_sequences_with_pfsas"):
-            raise RuntimeError("Actual native supplied-projector API not installed")
-        eps=tuple(float(e) for e in args.epsilons.split(","))
-        if len(eps)!=4:raise ValueError("Four preselected epsilons required")
-        model_dir=out/"native_models"
-        model_dir.mkdir(parents=True,exist_ok=True)
-        model_info=learned_projection_models(symbols,model_dir,
-                     args.initial_train_length,eps,k)
-        # If native GenESeSS learned no viable PFSA at the frozen epsilon
-        # settings, refuse to invent one / fall back to random projector.
-        add("native_LSmash_GenESeSS",
-            mean_native_to_references(lsmash,ref,cal,queries,native,
-                pfsa_files=[x["zbase_file"] for x in model_info]))
-    except Exception as ex:
-        statuses["native_LSmash_GenESeSS"]="FAILED_OR_UNUSABLE_NATIVE: "+repr(ex)
+            statuses[name]="FAILED_NATIVE_OUTPUT_VALIDATION: "+repr(ex)
+            methods.pop(name,None);calibrations.pop(name,None)
 
     for name,dimension in (("CUSTOM_marginal_JS",0),("CUSTOM_bigram_JS",1)):
         try:
@@ -291,6 +299,7 @@ def main():
          label_policy="NASA annotations accessed only to evaluate scores",
          alarm_onset_policy="new crossings only, same-segment predecessor required",
          methods_status=statuses,native_projector_models=model_info,
+         native_worker_provenance=methods_info,
          default_native_pinned="original C++ LSmash method",
          learned_native_pinned="real native GenESeSS PFSAs and C++ llk_distance(S,G)",
          baseline_class="simple custom statistical JS, not LSmash, GenESeSS, or LSM")
