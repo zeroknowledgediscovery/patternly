@@ -70,3 +70,22 @@ The optional original 2022 Patternly package requires a separate Python 3.9 envi
 ## CI
 
 The `nasa-telemetry-pilot.yml` workflow executes the smoke and complete 12-channel run against the checked-in real telemetry arrays, and uploads all plots/scores/tables as a GitHub Actions artifact. Raw generated results are intentionally not committed to Git.
+
+## Post-run alert audit (important)
+
+The original event-hit recall counts an annotated event whenever an alarm is already active during that event, including an alarm that began much earlier. This can substantially inflate apparent detection accuracy for detectors that remain in alarm for long periods. Do not interpret the original `false_alerts_per_1000` alone as a timewise false-positive rate.
+
+After running `pilot.py`, re-evaluate the saved outputs without refitting anything:
+
+```bash
+python experiments/nasa_smap_msl/audit_alerts.py \
+  --results results/nasa_smap_msl_pilot
+
+cat results/nasa_smap_msl_pilot/alert_audit_summary.csv
+```
+
+The audit writes `alert_audit_per_channel.csv` and `alert_audit_summary.csv`, including event-hit recall, **new alarm-onset recall**, non-event time fraction spent under an active alarm, and onset-based false alert episodes.
+
+On the initial 12-channel CI dataset, CUSUM originally scored 22/26 event hits but only **5/26** anomaly intervals contained a newly beginning alert. It was in alarm during **66.4%** of non-event observations. The approximate matrix-profile method had 15/26 new-onset event detections in the CI environment, with **2.39%** non-event time in alarm; one local environment reported 11/26 event hits for this method, so numerical reproducibility must also be audited. These are different operating points, not a matched-false-alarm-rate comparison.
+
+The corrected audit is reproducibly executed in `nasa-telemetry-pilot.yml`. Report both the original and corrected metrics before selecting a final method.
