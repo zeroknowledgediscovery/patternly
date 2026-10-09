@@ -5,6 +5,8 @@ on:
     branches: [data/nasa-smap-msl-telemetry]
     paths:
       - ".github/workflows/nasa-concat-preemption-suite.yml"
+      - "experiments/nasa_smap_msl/concatenated_preemption_suite.py"
+      - "experiments/nasa_smap_msl/native_causal_worker.py"
   workflow_dispatch:
 
 permissions:
@@ -30,7 +32,7 @@ jobs:
           python -m pip install --only-binary=:all: "zedsuite==0.0.7"
           python -m pip install "lsmash @ git+https://github.com/zeroknowledgediscovery/lsmash.git@66960a98a012f63face06ce70145b7ba3a386f7c"
           python -c "import lsmash; from zedsuite.genesess import GenESeSS; assert hasattr(lsmash,'from_sequences_with_pfsas'); print('NATIVE_BOTH_ENGINES_VERIFIED')"
-          python -m py_compile experiments/nasa_smap_msl/concatenated_preemption_suite.py experiments/nasa_smap_msl/aggregate_concat_preemption.py
+          python -m py_compile experiments/nasa_smap_msl/concatenated_preemption_suite.py experiments/nasa_smap_msl/native_causal_worker.py experiments/nasa_smap_msl/aggregate_concat_preemption.py
       - name: Prepare seven actual NASA concatenated arrays with explicit segment joins
         env:
           MPLBACKEND: Agg
