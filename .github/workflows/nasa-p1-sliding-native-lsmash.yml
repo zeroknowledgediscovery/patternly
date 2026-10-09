@@ -27,7 +27,7 @@ jobs:
           python -m pip install "pip==24.0"
           python -m pip install "numpy==1.23.5" "scipy==1.10.1" "pandas==1.5.3" "scikit-learn==1.2.2" "matplotlib==3.7.5" dill
           python -m pip install --only-binary=:all: "zedsuite==0.0.7"
-          python -m pip install "lsmash @ git+https://github.com/zeroknowledgediscovery/lsmash.git@83150361e4e9cbaed54a7f06ad65f13ad01de69b"
+          python -m pip install "lsmash @ git+https://github.com/zeroknowledgediscovery/lsmash.git@66960a98a012f63face06ce70145b7ba3a386f7c"
           python -c "import lsmash; from zedsuite.genesess import GenESeSS; assert hasattr(lsmash,'from_sequences_with_pfsas');print('BOTH_ACTUAL_NATIVE_ENGINES_OK')"
           python -m py_compile experiments/nasa_smap_msl/p1_sliding_lsmash.py
       - name: Test 1 native LSmash original random projector family, stride 5
