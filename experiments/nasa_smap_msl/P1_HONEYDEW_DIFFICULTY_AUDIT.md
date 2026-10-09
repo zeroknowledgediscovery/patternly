@@ -1,3 +1,23 @@
+# STATUS: SUPERSEDED FOR PREEMPTIVE DETECTION
+
+The original below audit scores windows against **all other test windows**;
+it is retrospective and noncausal. That violates the newly required
+past-only constraint. Even though its labels were not used to construct
+those distances, future measurements entered every transductive
+reference population. Its perfect 40-window JS AUROC **must not be used
+to judge whether a prospective preemption task is easy**.
+
+The corrected, reference-only, train-calibrated early-warning audit is
+implemented in p1_causal_preemption.py and is executed by
+.github/workflows/nasa-p1-causal-preemption.yml.
+Both genuine native LSmash variants and explicit statistical
+JS baselines use only normal training reference windows, and a
+new alarm must begin strictly before the annotated anomaly onset
+to count as preemptive. Historical results below remain intact
+solely as descriptive transductive observations.
+
+---
+
 # P-1 Honeydew difficulty audit: can simple agents solve the anomalies?
 
 Date: 2026-10-09.
