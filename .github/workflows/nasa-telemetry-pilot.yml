@@ -43,6 +43,11 @@ jobs:
           python experiments/nasa_smap_msl/pilot.py \
             --out results/nasa_smap_msl_pilot \
             --fail-on-error
+      - name: Audit alarm onsets and non-event coverage
+        run: |
+          python experiments/nasa_smap_msl/audit_alerts.py --results results/nasa_smap_msl_pilot
+          test -s results/nasa_smap_msl_pilot/alert_audit_summary.csv
+          test -s results/nasa_smap_msl_pilot/alert_audit_per_channel.csv
       - name: Verify expected result files
         run: |
           test -s results/nasa_smap_msl_pilot/summary.csv
