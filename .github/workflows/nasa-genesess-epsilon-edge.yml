@@ -1,0 +1,59 @@
+name: NASA GenESeSS two-state boundary refinement
+
+on:
+  push:
+    branches: [data/nasa-smap-msl-telemetry]
+    paths: [".github/workflows/nasa-genesess-epsilon-edge.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  edge-sweep:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: data/nasa-smap-msl-telemetry
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Install GenESeSS native runtime
+        run: |
+          python -m pip install "pip==24.0"
+          python -m pip install "numpy==1.23.5" "scipy==1.10.1" "pandas==1.5.3" "scikit-learn==1.2.2" "matplotlib==3.7.5" dill
+          python -m pip install --only-binary=:all: "zedsuite==0.0.7"
+      - name: Search low and high epsilon edges on unresolved channels
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+          MPLBACKEND: "Agg"
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python experiments/nasa_smap_msl/genesess_epsilon_sweep.py \
+            --channels C-1,G-7,T-13,M-1 \
+            --alphabets 2,4 \
+            --eps-values "0.00001,0.00005,0.0001,0.0003,0.0006,0.0015,0.0022,0.0025,0.003,0.0035,0.004,0.0045,0.8,0.85,0.9,0.95,0.99" \
+            --min-states 2 \
+            --timeout 15 \
+            --out results/nasa_genesess_epsilon_edge
+      - name: Validate boundary sweep completeness
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          p="results/nasa_genesess_epsilon_edge"
+          d=pd.read_csv(p+"/epsilon_grid.csv")
+          assert len(d)==4*2*17,len(d)
+          sel=pd.read_csv(p+"/selection_summary.csv")
+          assert len(sel)==8,len(sel)
+          print("EDGE_SELECTION\n"+sel.to_string(index=False))
+          PY
+      - name: Upload models, state counts and onset results
+        uses: actions/upload-artifact@v4
+        with:
+          name: nasa-genesess-epsilon-edge-refinement
+          path: results/nasa_genesess_epsilon_edge/
+          retention-days: 30
+          if-no-files-found: error
