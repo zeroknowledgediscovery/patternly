@@ -103,7 +103,7 @@ def compute_scores(args,out,train_s,test_s):
         raise RuntimeError("Unusable full native default LSmash matrix")
     native["native_LSmash_default"]=(
         D[:nref,nref:nref+nval].mean(axis=0),
-        D[:nref,nref+nval:].mean(axis=0)[nval:])
+        D[:nref,nref+nval:].mean(axis=0))
     print("NATIVE_DEFAULT_DONE",time.perf_counter()-begin,flush=True)
     del D
 
@@ -122,7 +122,7 @@ def compute_scores(args,out,train_s,test_s):
         raise RuntimeError("Unusable native GenESeSS-projected LSmash matrix")
     native["native_LSmash_GenESeSS"]=(
         D[:nref,nref:nref+nval].mean(axis=0),
-        D[:nref,nref+nval:].mean(axis=0)[nval:])
+        D[:nref,nref+nval:].mean(axis=0))
     print("NATIVE_GENESESS_PROJECTIONS_DONE",time.perf_counter()-begin,flush=True)
     del D
 
