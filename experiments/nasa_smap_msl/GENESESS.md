@@ -99,3 +99,23 @@ These are fixed-threshold pilot outcomes, not a final model comparison
 at matched false-alarm rates. In particular, one-state automata on
 near-constant channels indicate that quantization and data richness,
 not just epsilon, constrain the experiment.
+
+## Automated epsilon sweep for two or more predictive states
+
+Run the native GenESeSS search over 14 epsilons on each of 12 channels with both binary and four-level training-only quantization:
+
+    python experiments/nasa_smap_msl/genesess_epsilon_sweep.py --alphabets 2,4 --min-states 2 --out results/nasa_genesess_epsilon_sweep
+
+The sweep tests epsilon = 0.001, 0.002, 0.005, 0.01, 0.02, 0.03, 0.05, 0.075, 0.1, 0.15, 0.2, 0.3, 0.5 and 0.7. Each epsilon uses the genuine zedsuite GenESeSS implementation on the normal training fit segment only, isolated from other runs. A new PFSA is inferred at each epsilon and state count is read from its probability morph matrix. The method picks the smallest eligible state count (>=2), breaking ties toward larger epsilon. It scores validation/test data with native Llk only after selection, preventing test-label leakage.
+
+Results:
+
+- epsilon_grid.csv: all attempted epsilons, actual epsilon, state count, failure reason, training entropy, and model location
+- selection_summary.csv: each channel/quantizer success status, selected epsilon and state count
+- selected.csv: selected models and their scores/failures
+- models/: all successful inferred generators, including ones with one state
+- scores/ and plots/: selected models only
+
+If a training channel has only one distinct symbol after quantization, the experiment declares it degenerate rather than manufacturing two PFSA states. If every epsilon fails to yield 2+ states, it reports no eligible model. The selection criterion targets a minimum nontrivial state count, not best anomaly-detection performance.
+
+GitHub Actions: https://github.com/zeroknowledgediscovery/patternly/actions/workflows/nasa-genesess-two-state-sweep.yml
