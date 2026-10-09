@@ -1,0 +1,95 @@
+name: NASA GenESeSS all-model predictive validity and alarm curves
+
+on:
+  push:
+    branches: [data/nasa-smap-msl-telemetry]
+    paths: [".github/workflows/nasa-genesess-all-models.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  all-models:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: data/nasa-smap-msl-telemetry
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Install verified native GenESeSS runtime
+        run: |
+          python -m pip install "pip==24.0"
+          python -m pip install "numpy==1.23.5" "scipy==1.10.1" "pandas==1.5.3" "scikit-learn==1.2.2" "matplotlib==3.7.5" dill
+          python -m pip install --only-binary=:all: "zedsuite==0.0.7"
+          python -m py_compile experiments/nasa_smap_msl/genesess_all_models.py
+          python -c "from zedsuite.genesess import GenESeSS;from zedsuite.zutil import Llk; print('NATIVE_OK')"
+      - name: Download original 14-epsilon GenESeSS models
+        uses: actions/download-artifact@v4
+        with:
+          name: nasa-genesess-minimum-two-states-epsilon-sweep
+          run-id: 37880764127
+          github-token: ${{ github.token }}
+          path: results/previous_main
+      - name: Download epsilon boundary refinement models
+        uses: actions/download-artifact@v4
+        with:
+          name: nasa-genesess-epsilon-edge-refinement
+          run-id: 37881153073
+          github-token: ${{ github.token }}
+          path: results/previous_edge
+      - name: Download original 12-channel baselines
+        uses: actions/download-artifact@v4
+        with:
+          name: nasa-smap-msl-12channel-pilot
+          run-id: 37879203458
+          github-token: ${{ github.token }}
+          path: results/previous_baseline
+      - name: Validate the source artifacts and run all GenESeSS models
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+          MPLBACKEND: "Agg"
+          PYTHONUNBUFFERED: "1"
+        run: |
+          test -s results/previous_main/epsilon_grid.csv
+          test -s results/previous_edge/epsilon_grid.csv
+          test -s results/previous_baseline/scores/P-1.npz
+          python experiments/nasa_smap_msl/genesess_all_models.py \
+            --model-roots results/previous_main,results/previous_edge \
+            --baseline results/previous_baseline \
+            --out results/nasa_genesess_all_models \
+            --timeout 20
+      - name: Validate predictive-selection and calibration files
+        if: always()
+        run: |
+          if test -s results/nasa_genesess_all_models/run.json; then
+            python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+          p=Path("results/nasa_genesess_all_models")
+          config=json.loads((p/"run.json").read_text())
+          d=pd.read_csv(p/"all_model_scores.csv")
+          print("ALL_MODELS",json.dumps(config))
+          print("SUCCESSES",len(d[d.status=="success"]),"FAILURES",len(d[d.status!="success"]))
+          if (p/"selection_comparison.csv").is_file():
+              s=pd.read_csv(p/"selection_comparison.csv")
+              print("SELECTED\n",s.to_string(index=False))
+          if (p/"baseline_comparison.csv").is_file():
+              b=pd.read_csv(p/"baseline_comparison.csv")
+              print("P1\n",b.loc[b.channel=="P-1"].to_string(index=False))
+          PY
+          fi
+      - name: Upload all models' scores, ROC-like curves, selections, and figures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nasa-genesess-all-models-heldout-and-threshold-curves
+          path: results/nasa_genesess_all_models/
+          retention-days: 30
+          if-no-files-found: warn
