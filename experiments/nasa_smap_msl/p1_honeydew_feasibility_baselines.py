@@ -43,6 +43,23 @@ def quantized_windows(train,test,win,stride):
     qs=np.stack([q_test[s:s+win] for s in starts])
     return starts,xs,qs,q_train
 
+
+def mean_js_to_all_test(P,chunk_size=48):
+    """Custom pairwise Jensen-Shannon *baseline*, not the native LSmash method.
+
+    Like the mean native LSmash-to-all score, this is transductive:
+    it uses all test windows without their labels as a reference ensemble.
+    """
+    entropy=-np.sum(P*np.log2(P),axis=1)
+    output=np.empty(len(P),dtype=float)
+    for start in range(0,len(P),chunk_size):
+        stop=min(start+chunk_size,len(P))
+        avg=(P[start:stop,None,:]+P[None,:,:])/2
+        entropy_mix=-np.sum(avg*np.log2(avg),axis=2)
+        divergence=entropy_mix-.5*entropy[start:stop,None]-.5*entropy[None,:]
+        output[start:stop]=np.mean(np.maximum(divergence,0),axis=1)
+    return output
+
 def baselines(train,test,win,stride):
     starts,X,Q,q_train=quantized_windows(train,test,win,stride)
     k=4
@@ -67,7 +84,9 @@ def baselines(train,test,win,stride):
         "raw_window_standard_deviation":X.std(axis=1),
         "raw_mean_absolute_step_change":np.abs(np.diff(X,axis=1)).mean(axis=1),
         "marginal_symbol_JS_vs_train":np.array([js_div(p,p_ref) for p in marg]),
+        "marginal_symbol_JS_mean_to_test":mean_js_to_all_test(marg),
         "first_order_symbol_JS_vs_train":np.array([js_div(p,t_ref) for p in tr]),
+        "first_order_symbol_JS_mean_to_test":mean_js_to_all_test(tr),
     }
     return starts,result
 
@@ -86,7 +105,7 @@ def summarize(name,method,score,starts,win,events,outrows):
     ranking=np.argsort(-score,kind="stable")
     top=ranking[:positive]
     precision=float(labels[top].mean())
-    event_coverage=sum(any(np.any((starts[top]<b)&(starts[top]+win>a)) for a,b in events)
+    event_coverage=sum(int(np.any((starts[top]<b)&(starts[top]+win>a))) for a,b in events)
     outrows.append(dict(view=name,method=method,n_windows=len(labels),
                         positive_overlap_windows=positive,negative_windows=negative,
                         auc=auc,average_precision=ap,
@@ -155,7 +174,9 @@ def main():
             "native_LSmash_default":"Original compiled C++ LSmash output, from frozen CI",
             "native_LSmash_GenESeSS_projectors":"Original compiled C++ LSmash using GenESeSS fitted PFSAs, from frozen CI",
             "marginal_symbol_JS_vs_train":"Custom categorical Jensen-Shannon statistical baseline",
+            "marginal_symbol_JS_mean_to_test":"Custom transductive pairwise JS, directly comparable by reference population to mean native LSmash",
             "first_order_symbol_JS_vs_train":"Custom first-order categorical Jensen-Shannon statistical baseline",
+            "first_order_symbol_JS_mean_to_test":"Custom transductive first-order bigram JS baseline",
             "raw_*":"Simple custom raw telemetry statistics, not LSmash or GenESeSS"},
         n_rows=len(rows),anomaly_intervals=events,
         caveats=[
