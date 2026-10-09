@@ -60,6 +60,9 @@ def load_generator(path: Path, alphabet: int | None = None) -> dict:
         raise NativeError(f"Invalid emission probabilities: {path}")
     if not np.allclose(p.sum(axis=1), 1, atol=2e-4, rtol=0):
         raise NativeError(f"Native rows do not sum to 1: {path}")
+    # Native text serialization can round morph rows slightly; preserve the
+    # inferred probabilities up to print precision while enforcing stochastic rows.
+    p = p / p.sum(axis=1, keepdims=True)
     bad = ((nxt < 0) | (nxt >= p.shape[0])) & (p > 1e-12)
     if np.any(bad):
         raise NativeError(f"Native model contains nonzero-probability invalid transitions: {path}")
