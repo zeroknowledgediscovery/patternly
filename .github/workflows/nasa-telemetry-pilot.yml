@@ -1,0 +1,66 @@
+name: NASA SMAP MSL real telemetry 12-channel pilot
+
+on:
+  push:
+    branches:
+      - data/nasa-smap-msl-telemetry
+    paths:
+      - ".github/workflows/nasa-telemetry-pilot.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nasa-pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: data/nasa-smap-msl-telemetry
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python dependencies
+        run: python -m pip install -r experiments/nasa_smap_msl/requirements.txt
+      - name: Smoke test real spacecraft telemetry
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+          MPLBACKEND: "Agg"
+        run: |
+          python experiments/nasa_smap_msl/pilot.py \
+            --channels P-1,E-1,F-7 \
+            --out results/nasa_smoke \
+            --fail-on-error
+      - name: Run 12-channel reproducible pilot
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+          MPLBACKEND: "Agg"
+        run: |
+          python experiments/nasa_smap_msl/pilot.py \
+            --out results/nasa_smap_msl_pilot \
+            --fail-on-error
+      - name: Verify expected result files
+        run: |
+          test -s results/nasa_smap_msl_pilot/summary.csv
+          test -s results/nasa_smap_msl_pilot/per_channel.csv
+          test -s results/nasa_smap_msl_pilot/plots/P-1.png
+          test -s results/nasa_smap_msl_pilot/plots/F-7.png
+          python - <<'PY'
+          import pandas as pd
+          d=pd.read_csv("results/nasa_smap_msl_pilot/per_channel.csv")
+          assert d.channel.nunique()==12, d.channel.unique()
+          assert set(d.method)=={"zscore","cusum","matrix_profile","pfsa"},set(d.method)
+          assert len(d)==48,len(d)
+          print("VALIDATED",len(d),"channel-method results, 12 channels, 4 methods")
+          PY
+      - name: Upload all figures, metrics, and per-timestep scores
+        uses: actions/upload-artifact@v4
+        with:
+          name: nasa-smap-msl-12channel-pilot
+          path: results/nasa_smap_msl_pilot/
+          retention-days: 30
+          if-no-files-found: error
