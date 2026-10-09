@@ -56,5 +56,7 @@ jobs:
           git add experiments/pfsa_changepoint/results/
           if ! git diff --cached --quiet; then
             git commit -m "Record Patternly 2026 PFSA change-point benchmark [skip ci]"
+            git fetch origin experiment/pfsa-changepoint-2026
+            git rebase origin/experiment/pfsa-changepoint-2026
             git push origin HEAD:experiment/pfsa-changepoint-2026
           fi
