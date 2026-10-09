@@ -3,7 +3,7 @@ name: P-1 Honeydew difficulty audit — simple baselines vs genuine native LSmas
 on:
   push:
     branches: [data/nasa-smap-msl-telemetry]
-    paths: [".github/workflows/nasa-p1-honeydew-difficulty-audit.yml"]
+    paths: [".github/workflows/nasa-p1-honeydew-difficulty-audit.yml", "experiments/nasa_smap_msl/p1_honeydew_feasibility_baselines.py"]
   workflow_dispatch:
 
 permissions:
