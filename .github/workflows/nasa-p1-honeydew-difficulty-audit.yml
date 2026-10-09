@@ -1,0 +1,61 @@
+name: P-1 Honeydew difficulty audit — simple baselines vs genuine native LSmash
+
+on:
+  push:
+    branches: [data/nasa-smap-msl-telemetry]
+    paths: [".github/workflows/nasa-p1-honeydew-difficulty-audit.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  retrospective-baselines:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: data/nasa-smap-msl-telemetry
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ONLY openly labeled statistical-baseline dependencies
+        run: |
+          python -m pip install "numpy==1.26.4" "scipy==1.11.4" "pandas==2.2.3" "scikit-learn==1.5.2" "matplotlib==3.9.2"
+          python -m py_compile experiments/nasa_smap_msl/p1_honeydew_feasibility_baselines.py
+      - name: Retrieve frozen genuine native LSmash and GenESeSS projection results
+        uses: actions/download-artifact@v4
+        with:
+          name: nasa-P1-sliding-native-LSmash-vs-native-GenESeSS-projectors
+          run-id: 37945644905
+          github-token: ${{ github.token }}
+          path: results/native_p1_sliding
+      - name: Retrieve frozen genuine native 40x40 P-1 LSmash results
+        uses: actions/download-artifact@v4
+        with:
+          name: nasa-P-1-native-LSmash-40x40-matrix
+          run-id: 37942422102
+          github-token: ${{ github.token }}
+          path: results/native_p1_40
+      - name: Run transparent easy statistical baselines and evaluate identical anomaly windows
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+          MPLBACKEND: "Agg"
+        run: |
+          python experiments/nasa_smap_msl/p1_honeydew_feasibility_baselines.py \
+            --native-root results/native_p1_sliding \
+            --native-40-root results/native_p1_40 \
+            --out results/p1_honeydew_baselines
+          test -s results/p1_honeydew_baselines/retrospective_baselines.csv
+          cat results/p1_honeydew_baselines/retrospective_baselines.csv
+      - name: Upload fully labeled baseline findings and plots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: P1-Honeydew-baselines-versus-true-native-LSmash
+          path: results/p1_honeydew_baselines/
+          retention-days: 30
+          if-no-files-found: warn
