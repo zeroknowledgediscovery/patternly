@@ -148,7 +148,38 @@ def csv_write(path,items):
         writer.writeheader()
         writer.writerows(items)
 
+def check_native_environment():
+    """Validate the *same Python executable* used by isolated GenESeSS children.
+
+    A failed native import is an installation problem, not a one-state model.
+    Diagnose it once instead of repeating hundreds of failed subprocesses.
+    """
+    script=(
+        "import sys; "
+        "from zedsuite.genesess import GenESeSS; "
+        "from zedsuite.zutil import Llk; "
+        "print('NATIVE_GENESESS_OK',sys.version.split()[0],sys.executable)"
+    )
+    try:
+        probe=subprocess.run([sys.executable,"-c",script],
+            capture_output=True,text=True,timeout=20)
+    except subprocess.TimeoutExpired:
+        raise SystemExit("GenESeSS import preflight timed out. Check the Python 3.9 "
+                         "environment and the historical zedsuite native extension.")
+    if probe.returncode!=0:
+        raise SystemExit(
+            "GenESeSS native runtime preflight FAILED (returncode=%s).\n"
+            "Interpreter: %s\n"
+            "stdout:\n%s\n"
+            "stderr:\n%s\n"
+            "Use the separate Python 3.9 .venv-genesess environment with "
+            "zedsuite==0.0.7, not .venv-nasa.\n" %
+            (probe.returncode,sys.executable,probe.stdout[-1500:],probe.stderr[-3000:]))
+    print(probe.stdout.strip(),flush=True)
+
+
 def parent(args):
+    check_native_environment()
     out=Path(args.out)
     out.mkdir(parents=True,exist_ok=True)
     channels=[c.strip() for c in args.channels.split(",") if c.strip()]
@@ -180,6 +211,18 @@ def parent(args):
                     print("INFER",json.dumps({key:entry.get(key) for key in
                         ["channel","alphabet_requested","requested_eps","actual_eps",
                          "n_states","status","wall_seconds"]}),flush=True)
+                    # Surface the *first* failure per channel/quantizer:
+                    # the structured log already retains stderr for every epsilon.
+                    if entry["status"] not in ("success",) and not any(
+                        r.get("status") not in ("success",) for r in rows[:-1]
+                    ):
+                        print("NATIVE_FAILURE_DETAIL",json.dumps({
+                            "channel":channel,"alphabet":alphabet,
+                            "eps":eps,"returncode":entry.get("returncode"),
+                            "stderr":entry.get("stderr_tail"),
+                            "stdout":entry.get("stdout_tail"),
+                            "timeout_seconds":entry.get("timeout_seconds"),
+                        }),flush=True)
             all_grid.extend(rows)
             # Model selection uses the train-fit data only. Choose the *fewest*
             # nontrivial states (>=2), then prefer larger epsilon on ties.
@@ -200,7 +243,10 @@ def parent(args):
                     "score_error":scored.get("stderr_tail","")[-300:]}),flush=True)
                 status="selected"
             else:
-                status="none_found" if used>1 else "degenerate_training"
+                status=("degenerate_training" if used<2 else
+                        "all_native_failed" if not any(
+                            r.get("status")=="success" for r in rows)
+                        else "none_found")
                 print("NO_ELIGIBLE_MODEL",channel,"alphabet",alphabet,
                       "attempts",len(epsilons),"status",status,flush=True)
             summary.append(dict(channel=channel,alphabet_requested=alphabet,
