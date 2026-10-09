@@ -164,3 +164,52 @@ Epsilon-to-state count is often **nonmonotonic**: e.g. P-1 binary
 at 0.001 has 82 states; at 0.002 it collapses to one state; at
 0.005 it yields 13. Do not infer epsilon directionality from a
 single pair of runs.
+
+
+## Evaluating all inferred models (not just the smallest)
+
+The additional genesess_all_models.py experiment evaluates **every**
+successfully inferred PFSA from both the 14-epsilon and boundary-refinement
+runs. It preserves one-state generators as reference models, reports
+native Llk failures explicitly, and compares nontrivial learned generators
+with three training-only rules:
+
+1. min_nontrivial: minimum inferred states >=2, ties favor large epsilon.
+2. best_heldout_llk: lowest mean native Llk score among >=2 state models.
+3. complex_smaller_epsilon: maximum state count from a smaller epsilon
+   than the minimum-nontrivial model.
+
+The chronological data split is 70% normal training for inference,
+approximately 15% for selecting models by predictive performance and
+15% for independent quantile-threshold calibration. Test annotations
+are used only for retrospective event-recall and false-alarm metrics.
+
+For each candidate, thresholds are computed from normal calibration
+quantiles 0.5, 0.8, 0.9, 0.95, 0.98, 0.99, 0.995 and 0.999. Its curve
+plots realized test non-event time in alarm versus event onset recall.
+These are not test-label-tuned operational thresholds. Raw Llk scores
+from different alphabet sizes cannot be compared without normalization.
+
+Output files include:
+- all_model_scores.csv (normal heldout Llk, successes/failures)
+- selection_comparison.csv (three selected models per channel/quantizer)
+- baseline_comparison.csv (original four methods alongside GenESeSS)
+- curves/*.csv (alarm curves for all native models)
+- figures/*.png (states/Llk against epsilon and recall against alarm)
+- scores/*.npz (native model score arrays)
+
+GitHub workflow:
+https://github.com/zeroknowledgediscovery/patternly/actions/workflows/nasa-genesess-all-models.yml
+
+Download the GitHub model artifacts from previous runs 37880764127
+and 37881153073 into results/previous_main and results/previous_edge,
+and the NASA pilot artifact from 37879203458 into
+results/previous_baseline. In the native GenESeSS Python 3.9 environment:
+
+    python experiments/nasa_smap_msl/genesess_all_models.py \
+      --model-roots results/previous_main,results/previous_edge \
+      --baseline results/previous_baseline \
+      --out results/nasa_genesess_all_models
+
+The baseline pilot thresholds were calibrated with a larger segment;
+comparisons at the nominal same 0.995 quantile are preliminary.
