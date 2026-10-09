@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Native compiled LSmash 40x40 pairwise window distances on NASA R-1.
+"""Native compiled LSmash N-by-N pairwise window distances on NASA telemetry.
 
 This script does not implement or approximate LSmash. The only distance
 operation is lsmash.from_sequences, using compiled native projectors.
@@ -37,7 +37,7 @@ def make_windows(train, x, requested_n, requested_alphabet):
     symbols=np.digitize(x,edges).astype(np.uint32)
     window_length=len(x)//requested_n
     if window_length<32:
-        raise ValueError(f"Insufficient R-1 samples for {requested_n} windows: window_len={window_length}")
+        raise ValueError(f"Insufficient observations for {requested_n} windows: window_len={window_length}")
     used_len=requested_n*window_length
     mat=symbols[:used_len].reshape(requested_n,window_length)
     counts=np.bincount(mat.ravel().astype(int),minlength=k)
@@ -81,7 +81,7 @@ def main():
             wr.writerow(dict(window=i,start_inclusive=i*w,end_exclusive=(i+1)*w,n_samples=w))
     upper=native[np.triu_indices(args.n_windows,k=1)]
     metadata=dict(
-        source="NASA SMAP/MSL R-1 dataset via patternly",
+        source=f"NASA SMAP/MSL {args.channel} channel via patternly",
         implementation="Native zeroknowledgediscovery/lsmash package: lsmash.from_sequences",
         channel=args.channel,split=args.split,
         train_samples=int(len(train)),test_samples=int(len(test)),
