@@ -52,6 +52,26 @@ jobs:
             --timeout 90 \
             --out results/nasa_genesess_12ch
           cat results/nasa_genesess_12ch/summary.csv
+      - name: Full 12-channel binary GenESeSS epsilon comparison
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+          MPLBACKEND: "Agg"
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python experiments/nasa_smap_msl/genesess_pilot.py \
+            --eps-values 0.05,0.1 \
+            --alphabet 2 \
+            --timeout 90 \
+            --out results/nasa_genesess_12ch_binary
+          cat results/nasa_genesess_12ch_binary/summary.csv
+      - name: Upload binary GenESeSS results
+        uses: actions/upload-artifact@v4
+        with:
+          name: nasa-genesess-eps-005-010-12channels-binary
+          path: results/nasa_genesess_12ch_binary/
+          retention-days: 30
+          if-no-files-found: error
       - name: Upload 12-channel GenESeSS results
         uses: actions/upload-artifact@v4
         with:
