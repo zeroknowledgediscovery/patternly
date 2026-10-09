@@ -1,0 +1,51 @@
+name: NASA matched-realized-FPR diagnostic (test oracle only)
+
+on:
+  push:
+    branches: [data/nasa-smap-msl-telemetry]
+    paths: [".github/workflows/nasa-independent-oracle-fpr.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  oracle-fpr:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: data/nasa-smap-msl-telemetry
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Install analysis-only libraries
+        run: |
+          python -m pip install "numpy==1.23.5" "pandas==1.5.3" "scikit-learn==1.2.2" "matplotlib==3.7.5"
+          python -m py_compile experiments/nasa_smap_msl/exploratory_matched_fpr.py
+      - name: Download untouched prospective scores
+        uses: actions/download-artifact@v4
+        with:
+          name: nasa-independent-genesess-vs-marginal
+          run-id: 37925064973
+          github-token: ${{ github.token }}
+          path: results/nasa_independent_replication
+      - name: Retrospective test-label-oracle threshold comparison
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+        run: |
+          python experiments/nasa_smap_msl/exploratory_matched_fpr.py \
+            --original results/nasa_independent_replication \
+            --out results/nasa_independent_oracle
+          cat results/nasa_independent_oracle/WARN_ORACLE_NOT_PROSPECTIVE.json
+      - name: Upload separate oracle artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nasa-independent-oracle-matched-realized-fpr-DESCRIPTIVE-ONLY
+          path: results/nasa_independent_oracle/
+          retention-days: 30
+          if-no-files-found: warn
