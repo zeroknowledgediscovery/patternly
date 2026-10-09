@@ -39,6 +39,26 @@ jobs:
             --timeout 90 \
             --out results/nasa_genesess_smoke
           cat results/nasa_genesess_smoke/summary.csv
+      - name: Full 12-channel four-symbol GenESeSS epsilon comparison
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+          MPLBACKEND: "Agg"
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python experiments/nasa_smap_msl/genesess_pilot.py \
+            --eps-values 0.05,0.1 \
+            --alphabet 4 \
+            --timeout 90 \
+            --out results/nasa_genesess_12ch
+          cat results/nasa_genesess_12ch/summary.csv
+      - name: Upload 12-channel GenESeSS results
+        uses: actions/upload-artifact@v4
+        with:
+          name: nasa-genesess-eps-005-010-12channels
+          path: results/nasa_genesess_12ch/
+          retention-days: 30
+          if-no-files-found: error
       - name: Upload GenESeSS generated PFSAs, scores, figures, failures
         uses: actions/upload-artifact@v4
         with:
