@@ -79,7 +79,7 @@ def main():
         prospective=False,
         warning="DO NOT treat these test-label-oracle thresholds as deployable or blind results",
         note="Ties yield conservative rates at or below each target; no randomization",
-        n_channels=status.status.eq("success").sum(),
+        n_channels=int(status.status.eq("success").sum()),
         targets=TARGETS)
     (out/"WARN_ORACLE_NOT_PROSPECTIVE.json").write_text(json.dumps(meta,indent=2)+"\n")
     print("ORACLE_DONE",json.dumps(meta,default=int),flush=True)
