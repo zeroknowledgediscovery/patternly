@@ -1,0 +1,48 @@
+name: NASA telemetry real native LSmash smoke test
+
+on:
+  push:
+    branches: [data/nasa-smap-msl-telemetry]
+    paths: [".github/workflows/nasa-telemetry-native-lsmash.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-lsmash:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: data/nasa-smap-msl-telemetry
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install C++ toolchain and Python deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++ libgsl-dev libboost-all-dev
+          python -m pip install -r experiments/nasa_smap_msl/requirements.txt
+          python -m pip install "lsmash @ git+https://github.com/zeroknowledgediscovery/lsmash.git"
+          python -c "import lsmash; assert hasattr(lsmash,'from_sequences');print('Native LSmash available')"
+      - name: Test compiled LSmash with real NASA telemetry
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "2"
+          MPLBACKEND: "Agg"
+        run: |
+          python experiments/nasa_smap_msl/pilot.py \
+            --channels P-1,E-1,F-7 \
+            --methods lsmash \
+            --out results/nasa_native_lsmash \
+            --fail-on-error
+          test -s results/nasa_native_lsmash/summary.csv
+      - name: Upload original compiled LSmash results
+        uses: actions/upload-artifact@v4
+        with:
+          name: nasa-smap-msl-real-native-lsmash-3channels
+          path: results/nasa_native_lsmash/
+          retention-days: 30
+          if-no-files-found: error
