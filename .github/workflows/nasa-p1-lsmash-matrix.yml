@@ -1,0 +1,57 @@
+name: NASA P-1 native LSmash 40x40 matrix
+
+on:
+  push:
+    branches: [data/nasa-smap-msl-telemetry]
+    paths: [".github/workflows/nasa-p1-lsmash-matrix.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  p1-lsmash-matrix:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: data/nasa-smap-msl-telemetry
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build exact native LSmash commit
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++ libgsl-dev libboost-all-dev
+          python -m pip install -r experiments/nasa_smap_msl/requirements.txt
+          python -m pip install "lsmash @ git+https://github.com/zeroknowledgediscovery/lsmash.git@802ccc931c8047cfc3e563d6c342a475dad85b58"
+          python -c "import lsmash; print('NATIVE_LSMASH_MODULE',lsmash.__file__); assert hasattr(lsmash,'from_sequences')"
+      - name: Compute original native LSmash distances on P-1 test telemetry
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "2"
+          MPLBACKEND: "Agg"
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python experiments/nasa_smap_msl/r1_lsmash_matrix.py \
+            --channel P-1 --split test --n-windows 40 \
+            --alphabet 4 --out results/nasa_p1_native_lsmash_matrix
+          python - <<'PY'
+          import json,numpy as np
+          from pathlib import Path
+          p=Path("results/nasa_p1_native_lsmash_matrix")
+          d=np.load(p/"distance_matrix.npy")
+          meta=json.loads((p/"metadata.json").read_text())
+          assert d.shape==(40,40) and np.isfinite(d).all()
+          assert (p/"distance_heatmap.png").stat().st_size>1000
+          print("VERIFIED_REAL_NATIVE_P1",json.dumps(meta))
+          PY
+      - name: Upload numerical matrix and heatmap
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nasa-P-1-native-LSmash-40x40-matrix
+          path: results/nasa_p1_native_lsmash_matrix/
+          retention-days: 30
+          if-no-files-found: warn
