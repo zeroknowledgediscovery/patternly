@@ -1,0 +1,68 @@
+name: NASA independent GenESeSS versus marginal replication
+
+on:
+  push:
+    branches: [data/nasa-smap-msl-telemetry]
+    paths:
+      - ".github/workflows/nasa-independent-genesess-replication.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independent-replication:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: data/nasa-smap-msl-telemetry
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Install pinned native GenESeSS and analysis dependencies
+        run: |
+          python -m pip install "pip==24.0"
+          python -m pip install "numpy==1.23.5" "scipy==1.10.1" "pandas==1.5.3" "scikit-learn==1.2.2" "matplotlib==3.7.5" dill
+          python -m pip install --only-binary=:all: "zedsuite==0.0.7"
+          python -m py_compile experiments/nasa_smap_msl/independent_replication.py
+          python experiments/nasa_smap_msl/independent_replication.py selftest
+      - name: Execute frozen 69-channel independent evaluation
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+          MPLBACKEND: "Agg"
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python experiments/nasa_smap_msl/independent_replication.py \
+            --eps 0.1 --window 128 --stride 32 \
+            --out results/nasa_independent_replication
+      - name: Check complete reporting and print primary paired results
+        if: always()
+        run: |
+          if test -s results/nasa_independent_replication/channel_status.csv; then
+            python - <<'PY'
+          import json
+          import pandas as pd
+          from pathlib import Path
+          p=Path("results/nasa_independent_replication")
+          rows=pd.read_csv(p/"channel_status.csv")
+          print("CHANNELS",len(rows),rows.status.value_counts().to_dict())
+          if (p/"paired_summary.json").is_file():
+              summary=json.loads((p/"paired_summary.json").read_text())
+              for x in summary:
+                  if x["budget"]==0.05:
+                      print("PRIMARY",json.dumps(x))
+          if (p/"paired_event_discordance.csv").is_file():
+              print("PAIRS",pd.read_csv(p/"paired_event_discordance.csv").to_string(index=False))
+          PY
+          fi
+      - name: Upload trained models, both scores, full evaluation and failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nasa-independent-genesess-vs-marginal
+          path: results/nasa_independent_replication/
+          retention-days: 30
+          if-no-files-found: warn
