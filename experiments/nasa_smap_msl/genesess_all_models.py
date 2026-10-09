@@ -297,6 +297,7 @@ def main():
     parser.add_argument("--window",type=int,default=128)
     parser.add_argument("--stride",type=int,default=32)
     parser.add_argument("--timeout",type=int,default=20)
+    parser.add_argument("--require-all",action="store_true")
     parser.add_argument("--out",default="results/nasa_genesess_all_models")
     args=parser.parse_args()
     if args.mode=="child":
