@@ -26,3 +26,19 @@ GitHub Actions installs the historical Patternly separately and tests `legacy_pr
 The correctly specified depth-10 likelihood scanner has access to the entire sequence but no source probabilities. The adaptive two-model approach uses the first and last 20% to fit two generators; this assumes a change occurs in the central 60%. Neither method is an information-theoretically optimal detector. The original Patternly implementation is an older research prototype and may fail on modern Python environments or on long-context PFSAs.
 
 Failure of window clustering does not imply failure of Patternly's PFSA modeling layer, and failure of the historical package to install is **not** evidence of scientific inadequacy.
+
+
+## Completed results
+
+Five seeds at each of N=60k and N=180k, contrast delta=0.17:
+
+| method | N=60k median error | N=180k median error |
+|---|---:|---:|
+| Correct-order Markov likelihood scan | 210 | 310 |
+| Two tail-trained order-10 PFSA contrast | 4,672 | 420 |
+| Original Patternly likelihood on 500-symbol windows | 15,200 | 24,100 |
+| Original Patternly likelihood on 1000-symbol windows | 14,300 (4/5 valid) | 37,400 |
+
+The historical Patternly sweep was executed with Python 3.9 / zedsuite 0.0.7 binary wheel. Of 50 combinations, 42 yielded a valid estimate, three crashed in native code, and five (N=60k, window=8000) had too few complete windows for the tail-based orientation and segmentation used here. Other window sizes and full success/failure counts are recorded in `results/legacy_isolated_summary.json`. These outcomes are preliminary five-seed synthetic benchmarks, not a general ranking of stochastic changepoint algorithms.
+
+GitHub Actions: `patternly-legacy-isolated.yml` (historical library), `patternly-pfsa-cp-2026.yml` (modern baseline). No changes were made to Patternly's historical main branch.
