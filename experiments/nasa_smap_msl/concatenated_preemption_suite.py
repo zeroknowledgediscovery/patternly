@@ -180,7 +180,13 @@ def main():
     k=len(edges)+1
     if k<2:
         raise RuntimeError(f"DEGENERATE_QUANTIZATION: {args.channel} has one bin in reference")
-    symbols=np.digitize(full,edges).astype(np.uint32)
+    # For a collapsed quartile at the reference minimum, numpy's default
+    # right=False maps *both* the historical minimum and all later higher
+    # values to the SAME code. Choose the side based ONLY on historical
+    # reference measurements; this preserves the ability to detect higher
+    # values without using future observations or anomaly labels.
+    right_closed=bool(k<4 and edges[0]==np.min(fit))
+    symbols=np.digitize(full,edges,right=right_closed).astype(np.uint32)
     ref_start,ref=windows_in_segment(
         symbols,0,args.reference_length,args.window,args.stride)
     cal_start,cal=windows_in_segment(
@@ -293,6 +299,7 @@ def main():
          n_post_seam_scored=len(post),
          window=args.window,stride=args.stride,
          reference_quantile_edges=edges.tolist(),alphabet_size=k,
+         train_only_bin_edge_tie_policy=("right_closed" if right_closed else "numpy_default_left_closed"),
          reference_symbols=sorted(ref_symbols),
          full_symbols=sorted(alphabet_full),events=events,
          reference_policy="fixed past-only prefix, no model update",
