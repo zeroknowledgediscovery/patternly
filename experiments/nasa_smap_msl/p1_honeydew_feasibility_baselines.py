@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Scientific difficulty audit: is P-1 easy without GenESeSS or LSmash?
+"""LEGACY NONCAUSAL DIFFICULTY AUDIT (NOT VALID FOR EARLY WARNING).
+
+The mean-to-all-test window comparisons below use future test data.
+Do NOT interpret this script or its AUROCs as preemptive detection.
+For train-only reference and strictly before-onset alarms instead run
+p1_causal_preemption.py.
+
+Original question: is P-1 easy without GenESeSS or LSmash?
 
 Baselines ONLY: raw-signal statistics, 4-symbol marginal Jensen-Shannon,
 and first-order transition JS, implemented and transparently labeled here.
