@@ -1,0 +1,46 @@
+name: Historical Patternly Python39 Change-Point Check
+
+on:
+  push:
+    branches: [experiment/pfsa-changepoint-2026]
+    paths: [".github/workflows/patternly-pfsa-cp-legacy39.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  historical:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: experiment/pfsa-changepoint-2026
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Install supported 2022-era dependency wheels
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "numpy==1.23.5" "scipy==1.10.1" "pandas==1.5.3" "scikit-learn==1.2.2" "numba==0.57.1" dill
+          python -m pip install --only-binary=:all: "zedsuite==0.0.7"
+          python -m pip install --only-binary=:all: "patternly==0.0.33"
+          python -c "from patternly.detection import StreamingDetection; print('HISTORICAL_IMPORT_OK')"
+      - name: Execute actual historical Patternly streaming algorithm
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "1"
+        run: |
+          timeout 240s python experiments/pfsa_changepoint/legacy_probe.py
+      - name: Record historical Patternly result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add experiments/pfsa_changepoint/results/legacy_patternly.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Record historical Patternly Python 3.9 benchmark [skip ci]"
+            git fetch origin experiment/pfsa-changepoint-2026
+            git rebase origin/experiment/pfsa-changepoint-2026
+            git push origin HEAD:experiment/pfsa-changepoint-2026
+          fi
