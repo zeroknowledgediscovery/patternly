@@ -102,3 +102,23 @@ The included tests inject an explicitly labeled **fake backend only into the Pyt
 ### Next experiments
 
 Run the native binary on short P-1, T-1 and F-7 streams; verify identical-input matrix repeatability, actual PFSA creation, occupancy and switching graphs, and boundary alignment with held-out anomaly labels. Then add native `Llk` calibration for window-to-generator assignment, hysteresis/persistence admission, and a causal false-positive-controlled boundary detector.
+
+## Visualization of a completed experiment
+
+The plotting script reads existing result files and does **not** run native engines again.
+
+```bash
+python experiments/nasa_smap_msl/plot_streaming_pattern_library.py \
+  --result results/nasa_pattern_library/P-1 \
+  --input results/nasa_concatenated_research_view/P-1.npz
+```
+
+Generated in the result directory:
+
+- `streaming_dashboard.png`: raw telemetry and annotations (evaluation only), assignment history, nearest-library and consecutive-window LSmash distances with thresholds, library growth, and empirical occurrence probabilities.
+- `library_matrices.png`: exemplar LSmash distances, observed transition counts and Dirichlet-smoothed transition probabilities.
+- `transition_graph.png`: empirical directed assignment graph, with **only observed** transitions plotted.
+
+Annotations and original train/test split are plotted for interpretation only; they do not inform the native online matching or generator admission.
+
+If one pattern was inferred, the assignment panel and occurrence probability are necessarily constant, and the directed graph has only a possible self-edge. Before concluding that no switches exist, inspect the distance traces and threshold calibration. Overlapping windows generate highly dependent assignments, so counts are **per scored window**, not independent observations.
