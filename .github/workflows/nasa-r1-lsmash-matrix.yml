@@ -1,0 +1,59 @@
+name: NASA R-1 native LSmash N-by-N distance visualization
+
+on:
+  push:
+    branches: [data/nasa-smap-msl-telemetry]
+    paths:
+      - ".github/workflows/nasa-r1-lsmash-matrix.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  r1-all-pairs:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: data/nasa-smap-msl-telemetry
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install original native LSmash implementation
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++ libgsl-dev libboost-all-dev
+          python -m pip install -r experiments/nasa_smap_msl/requirements.txt
+          python -m pip install "lsmash @ git+https://github.com/zeroknowledgediscovery/lsmash.git@802ccc931c8047cfc3e563d6c342a475dad85b58"
+          python -c "import lsmash; print('LSMASH_NATIVE_IMPORT',lsmash.__file__); assert hasattr(lsmash,'from_sequences')"
+      - name: Compute real 40x40 LSmash matrix from R-1 test windows
+        env:
+          OPENBLAS_NUM_THREADS: "1"
+          OMP_NUM_THREADS: "2"
+          MPLBACKEND: "Agg"
+          PYTHONUNBUFFERED: "1"
+        run: |
+          python experiments/nasa_smap_msl/r1_lsmash_matrix.py \
+            --channel R-1 --split test --n-windows 40 \
+            --alphabet 4 \
+            --out results/nasa_r1_native_lsmash_matrix
+          test -s results/nasa_r1_native_lsmash_matrix/distance_matrix.csv
+          test -s results/nasa_r1_native_lsmash_matrix/distance_heatmap.png
+          python - <<'PY'
+          import json,numpy as np
+          from pathlib import Path
+          p=Path('results/nasa_r1_native_lsmash_matrix')
+          D=np.load(p/'distance_matrix.npy')
+          assert D.shape==(40,40) and np.isfinite(D).all()
+          print('VERIFIED_NATIVE_MATRIX',D.shape)
+          print('VERIFIED_METADATA',json.loads((p/'metadata.json').read_text()))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nasa-R-1-native-LSmash-40x40-matrix
+          path: results/nasa_r1_native_lsmash_matrix/
+          if-no-files-found: warn
+          retention-days: 30
